@@ -140,7 +140,7 @@
                         </button>
                     </div>
 
-                    <!-- Row 2: Filter Lanjutan (Perbaikan yang diminta) -->
+                    <!-- Row 2: Filter Lanjutan -->
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
                         <div>
                             <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Status Pengiriman</label>
@@ -301,10 +301,67 @@
                     </select>
                     <input type="datetime-local" id="payDateTime" class="w-full border p-2 rounded text-sm" required>
                     <input type="text" id="payAmount" oninput="handleCurrencyInput(this)" class="w-full border p-2 rounded text-sm font-bold" placeholder="Jumlah (Rp)">
+                    
+                    <!-- Fitur Upload Bukti -->
+                    <div class="mt-2">
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Bukti Transfer</label>
+                        <input type="file" id="payEvidence" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    </div>
+
                     <button type="button" onclick="addPaymentItem()" class="w-full bg-emerald-600 text-white py-2.5 rounded-lg font-bold text-sm">Tambah</button>
                 </form>
             </div>
             <div id="paymentItemList" class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Pengeluaran -->
+<div id="expenseModal" class="modal">
+    <div class="bg-white mx-auto mt-10 p-6 rounded-xl w-full max-w-md shadow-2xl">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Tambah Pengeluaran</h3>
+            <button onclick="closeModal('expenseModal')" class="text-gray-400"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="expenseForm" class="space-y-4">
+            <input type="date" id="eDate" required class="w-full border p-3 rounded-lg text-sm bg-slate-50">
+            <select id="eCategory" required class="w-full border p-3 rounded-lg text-sm bg-slate-50">
+                <option value="Operasional">Operasional</option>
+                <option value="Zakat">Zakat/Sedekah</option>
+                <option value="Gaji">Gaji</option>
+                <option value="Lainnya">Lainnya</option>
+            </select>
+            <input type="text" id="eAmount" required oninput="handleCurrencyInput(this)" class="w-full border p-3 rounded-lg text-sm font-bold bg-slate-50" placeholder="Jumlah (Rp)">
+            <textarea id="eNote" class="w-full border p-3 rounded-lg text-sm h-24 bg-slate-50" placeholder="Catatan..."></textarea>
+            <button type="submit" class="w-full bg-slate-800 text-white py-4 rounded-xl font-bold">Simpan Pengeluaran</button>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Kelola Staf -->
+<div id="staffModal" class="modal">
+    <div class="bg-white mx-auto mt-10 p-6 rounded-xl w-full max-w-2xl shadow-2xl">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Kelola Akses Staf</h3>
+            <button onclick="closeModal('staffModal')" class="text-gray-400"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-slate-50 p-4 rounded-xl">
+                <h4 class="text-xs font-black uppercase text-slate-400 mb-3">Tambah Staf Baru</h4>
+                <div class="space-y-3">
+                    <input type="text" id="sUsername" class="w-full border p-2 rounded text-sm" placeholder="Username Staf">
+                    <input type="password" id="sPassword" class="w-full border p-2 rounded text-sm" placeholder="Password Staf">
+                    <div class="space-y-2">
+                        <p class="text-[10px] font-bold text-slate-500 uppercase">Izin Akses:</p>
+                        <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="sAccFinance"> Lihat Keuangan</label>
+                        <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="sAccInput"> Input Data Baru</label>
+                        <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="sAccExpense"> Kelola Pengeluaran</label>
+                        <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="sAccDelete"> Hapus Data</label>
+                    </div>
+                    <button onclick="addStaff()" class="w-full bg-blue-600 text-white py-2 rounded font-bold text-sm">Simpan Staf</button>
+                </div>
+            </div>
+            <div class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar" id="staffList"></div>
         </div>
     </div>
 </div>
@@ -322,6 +379,13 @@
             <textarea id="pStoreAddress" class="w-full border p-3 rounded-lg text-sm h-24 bg-slate-50" placeholder="Alamat Toko"></textarea>
             <button onclick="saveStoreProfile()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg">Simpan</button>
         </div>
+    </div>
+</div>
+
+<!-- Modal Image Preview -->
+<div id="imagePreviewModal" class="modal" onclick="closeModal('imagePreviewModal')">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <img id="fullSizeImg" src="" class="max-w-full max-h-[90vh] rounded-lg shadow-2xl">
     </div>
 </div>
 
@@ -381,6 +445,7 @@
     function updateUI() {
         if (!currentUser) return;
         renderTransactions();
+        renderExpenses();
         if(currentUser.access.view_finance) {
             let totalOmzet = 0, totalHpp = 0, totalExp = 0;
             db.transactions.forEach(t => {
@@ -441,9 +506,13 @@
         document.getElementById('emptyState').classList.toggle('hidden', filtered.length > 0);
 
         filtered.forEach((t, i) => {
-            const net = (t.priceSale * t.itemQty) - (t.discount || 0);
-            const paid = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
-            const lunas = paid >= net;
+            const netB = (t.priceSale * t.itemQty) - (t.discount || 0);
+            const paidB = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
+            const lunasB = paidB >= netB;
+
+            const hppS = (t.priceCost * t.itemQty);
+            const paidS = (t.payments || []).filter(p => p.type === 'supplier').reduce((s, p) => s + p.amount, 0);
+            const lunasS = paidS >= hppS;
 
             tbody.innerHTML += `
                 <tr class="hover:bg-slate-50">
@@ -456,18 +525,129 @@
                         ${t.isShipped ? '<i class="fas fa-check-circle text-emerald-500"></i>' : '<i class="fas fa-clock text-slate-300"></i>'}
                     </td>
                     <td class="p-4 border-b">
-                        <div class="font-bold">${t.buyerName}</div>
-                        <div class="text-[9px] ${lunas ? 'text-emerald-500' : 'text-red-500'} font-black uppercase">
-                            ${lunas ? 'Lunas' : 'Rp ' + formatNumber(net - paid)}
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="font-bold">${t.buyerName}</div>
+                                <div class="text-[9px] ${lunasB ? 'text-emerald-500' : 'text-red-500'} font-black uppercase">
+                                    ${lunasB ? 'Lunas' : 'Rp ' + formatNumber(netB - paidB)}
+                                </div>
+                            </div>
+                            <a href="https://wa.me/${formatWA(t.buyerPhone)}" target="_blank" class="text-emerald-500 hover:text-emerald-600 transition ml-2">
+                                <i class="fab fa-whatsapp text-lg"></i>
+                            </a>
                         </div>
                     </td>
                     <td class="p-4 border-b">
-                        <div class="text-xs">${t.supplierName || '-'}</div>
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xs font-bold">${t.supplierName || '-'}</div>
+                                <div class="text-[9px] ${lunasS ? 'text-emerald-500' : 'text-purple-600'} font-black uppercase">
+                                    ${lunasS ? 'Lunas' : 'Sisa: Rp ' + formatNumber(hppS - paidS)}
+                                </div>
+                            </div>
+                            ${t.supplierPhone ? `
+                                <a href="https://wa.me/${formatWA(t.supplierPhone)}" target="_blank" class="text-emerald-500 hover:text-emerald-600 transition ml-2">
+                                    <i class="fab fa-whatsapp text-lg"></i>
+                                </a>
+                            ` : ''}
+                        </div>
                     </td>
                     <td class="p-4 border-b text-center space-x-2">
                         <button onclick="editTx(${db.transactions.indexOf(t)})" class="text-slate-400 hover:text-blue-600"><i class="fas fa-edit"></i></button>
                     </td>
                 </tr>
+            `;
+        });
+    }
+
+    // --- EXPENSES ---
+    function prepareNewExpense() {
+        document.getElementById('expenseForm').reset();
+        document.getElementById('eDate').value = new Date().toISOString().split('T')[0];
+        openModal('expenseModal');
+    }
+
+    document.getElementById('expenseForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const data = {
+            date: document.getElementById('eDate').value,
+            category: document.getElementById('eCategory').value,
+            amount: Number(unformatInput(document.getElementById('eAmount').value)),
+            note: document.getElementById('eNote').value
+        };
+        db.expenses.unshift(data);
+        saveDB();
+        closeModal('expenseModal');
+    });
+
+    function renderExpenses() {
+        const tbody = document.getElementById('expenseTableBody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        db.expenses.forEach((e, i) => {
+            tbody.innerHTML += `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-4 border-b text-xs font-mono">${e.date}</td>
+                    <td class="p-4 border-b font-medium">${e.category}</td>
+                    <td class="p-4 border-b font-bold text-red-600">Rp ${formatNumber(e.amount)}</td>
+                    <td class="p-4 border-b text-slate-500 italic">${e.note || '-'}</td>
+                    <td class="p-4 border-b text-center only-access" data-access="delete_data">
+                        <button onclick="deleteExpense(${i})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash-alt"></i></button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    function deleteExpense(i) {
+        if(confirm('Hapus data pengeluaran ini?')) {
+            db.expenses.splice(i, 1);
+            saveDB();
+        }
+    }
+
+    // --- STAFF MANAGEMENT ---
+    function openStaffManager() {
+        renderStaffList();
+        openModal('staffModal');
+    }
+
+    function addStaff() {
+        const u = document.getElementById('sUsername').value;
+        const p = document.getElementById('sPassword').value;
+        if(!u || !p) return;
+        
+        db.users.push({
+            user: u, pass: p, role: 'staff',
+            access: {
+                view_finance: document.getElementById('sAccFinance').checked,
+                input_data: document.getElementById('sAccInput').checked,
+                manage_expenses: document.getElementById('sAccExpense').checked,
+                delete_data: document.getElementById('sAccDelete').checked,
+                edit_tx: document.getElementById('sAccInput').checked,
+                edit_pay: document.getElementById('sAccInput').checked
+            }
+        });
+        document.getElementById('sUsername').value = "";
+        document.getElementById('sPassword').value = "";
+        saveDB();
+        renderStaffList();
+    }
+
+    function renderStaffList() {
+        const list = document.getElementById('staffList');
+        list.innerHTML = '';
+        db.users.filter(u => u.role !== 'owner').forEach((u, i) => {
+            list.innerHTML += `
+                <div class="bg-white border p-3 rounded-lg flex justify-between items-center shadow-sm">
+                    <div>
+                        <div class="font-bold text-blue-600">${u.user}</div>
+                        <div class="text-[9px] text-slate-400">Akses: ${Object.keys(u.access).filter(k => u.access[k]).join(', ')}</div>
+                    </div>
+                    <button onclick="db.users.splice(db.users.indexOf(${JSON.stringify(u)}), 1); saveDB(); renderStaffList();" class="text-red-400 hover:text-red-600">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
             `;
         });
     }
@@ -532,21 +712,40 @@
         const now = new Date();
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
         document.getElementById('payDateTime').value = now.toISOString().slice(0, 16);
+        document.getElementById('payEvidence').value = "";
         renderPaymentItems();
         openModal('paymentModal');
     }
 
-    function addPaymentItem() {
+    async function addPaymentItem() {
         const amount = Number(unformatInput(document.getElementById('payAmount').value));
         if(amount <= 0) return;
+
+        let evidenceData = null;
+        const fileInput = document.getElementById('payEvidence');
+        if (fileInput.files && fileInput.files[0]) {
+            evidenceData = await fileToBase64(fileInput.files[0]);
+        }
+
         currentActivePayments.push({
             type: document.getElementById('payTo').value,
             dateTime: document.getElementById('payDateTime').value,
             amount: amount,
-            bank: 'Transfer'
+            bank: 'Transfer',
+            evidence: evidenceData
         });
         document.getElementById('payAmount').value = "";
+        document.getElementById('payEvidence').value = "";
         renderPaymentItems();
+    }
+
+    function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
     }
 
     function renderPaymentItems() {
@@ -554,15 +753,47 @@
         list.innerHTML = '';
         currentActivePayments.forEach((p, i) => {
             list.innerHTML += `
-                <div class="bg-white border p-2 rounded text-xs flex justify-between items-center">
-                    <div>
-                        <span class="font-black ${p.type === 'buyer' ? 'text-emerald-500' : 'text-purple-500'} uppercase text-[8px]">${p.type}</span>
-                        <div>Rp ${formatNumber(p.amount)}</div>
+                <div class="bg-white border p-3 rounded-xl text-xs flex justify-between items-center shadow-sm">
+                    <div class="flex items-center gap-3">
+                        ${p.evidence ? `
+                            <img src="${p.evidence}" onclick="showFullImage('${p.evidence}')" class="w-10 h-10 rounded object-cover border cursor-pointer hover:opacity-80 transition">
+                        ` : `
+                            <div class="w-10 h-10 rounded bg-slate-100 flex items-center justify-center text-slate-300">
+                                <i class="fas fa-image"></i>
+                            </div>
+                        `}
+                        <div>
+                            <span class="font-black ${p.type === 'buyer' ? 'text-emerald-500' : 'text-purple-500'} uppercase text-[8px]">${p.type === 'buyer' ? 'DARI PEMBELI' : 'KE SUPPLIER'}</span>
+                            <div class="font-bold">Rp ${formatNumber(p.amount)}</div>
+                            <div class="text-[9px] text-slate-400">${p.dateTime.replace('T', ' ')}</div>
+                        </div>
                     </div>
-                    <button onclick="currentActivePayments.splice(${i}, 1); renderPaymentItems();" class="text-red-400"><i class="fas fa-trash"></i></button>
+                    <button onclick="currentActivePayments.splice(${i}, 1); renderPaymentItems();" class="text-red-400 hover:text-red-600 transition"><i class="fas fa-trash"></i></button>
                 </div>
             `;
         });
+    }
+
+    function showFullImage(src) {
+        document.getElementById('fullSizeImg').src = src;
+        openModal('imagePreviewModal');
+    }
+
+    // --- PROFIL TOKO ---
+    function openStoreProfile() {
+        document.getElementById('pStoreName').value = db.config.name || '';
+        document.getElementById('pStorePhone').value = db.config.phone || '';
+        document.getElementById('pStoreAddress').value = db.config.address || '';
+        openModal('storeProfileModal');
+    }
+
+    function saveStoreProfile() {
+        db.config.name = document.getElementById('pStoreName').value;
+        db.config.phone = document.getElementById('pStorePhone').value;
+        db.config.address = document.getElementById('pStoreAddress').value;
+        saveDB();
+        updateStoreNameUI();
+        closeModal('storeProfileModal');
     }
 
     // --- UTILS ---
@@ -570,6 +801,12 @@
     function unformatInput(v) { return v ? v.toString().replace(/\./g, "") : 0; }
     function formatInput(v) { return v.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
     function handleCurrencyInput(e) { e.value = formatInput(e.value); }
+    function formatWA(p) {
+        if(!p) return "";
+        let cleaned = p.replace(/\D/g, '');
+        if(cleaned.startsWith('0')) cleaned = '62' + cleaned.slice(1);
+        return cleaned;
+    }
     function openModal(id) { document.getElementById(id).style.display = 'block'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
     function toggleSupplierFields() { document.getElementById('supplierFieldContainer').classList.toggle('hidden', document.getElementById('fIsReady').checked); }
@@ -579,11 +816,19 @@
     function switchTab(t) {
         document.getElementById('sectionSales').classList.toggle('hidden', t !== 'sales');
         document.getElementById('sectionExpenses').classList.toggle('hidden', t !== 'expenses');
+        document.getElementById('tabSales').classList.toggle('tab-active', t === 'sales');
+        document.getElementById('tabExpenses').classList.toggle('tab-active', t === 'expenses');
+        updateUI();
     }
     function updateStoreNameUI() {
         const n = db.config.name || 'Bisnis Berkah';
         document.getElementById('storeNameLabel').innerText = n;
         document.getElementById('loginStoreName').innerText = n;
+    }
+    function handleLogout() {
+        currentUser = null;
+        document.getElementById('mainApp').classList.add('hidden');
+        document.getElementById('loginPage').classList.remove('hidden');
     }
 </script>
 </body>

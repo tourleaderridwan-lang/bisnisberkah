@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Penjualan Berkah</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.6);
+            overflow-y: auto;
+            backdrop-filter: blur(4px);
+        }
+
+        .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; font-weight: 800; }
+        
+        @media print {
+            body * { visibility: hidden; }
+            #printArea, #printArea * { visibility: visible; }
+            #printArea { position: absolute; left: 0; top: 0; width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+
+<!-- Halaman Login -->
+<div id="loginPage" class="min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+        <div class="text-center mb-8">
+            <h1 id="loginStoreName" class="text-3xl font-bold text-blue-600">Bisnis Berkah</h1>
+            <p class="text-gray-500 text-sm">Masuk untuk mengelola amanah</p>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-bold text-gray-700">Username</label>
+                <input type="text" id="usernameInput" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500" placeholder="Username">
+            </div>
+            <div>
+                <label class="block text-sm font-bold text-gray-700">Password</label>
+                <input type="password" id="passwordInput" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500" placeholder="••••••••">
+            </div>
+            <button onclick="handleLogin()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition">Login</button>
+            <p id="loginError" class="text-red-500 text-sm text-center hidden">Username atau password salah!</p>
+        </div>
+    </div>
+</div>
+
+<!-- Aplikasi Utama -->
+<div id="mainApp" class="hidden">
+    <nav class="bg-white border-b sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <span id="storeNameLabel" class="text-xl font-bold text-blue-600 tracking-tight">Bisnis Berkah</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span id="userDisplay" class="hidden sm:inline text-sm font-medium text-slate-600 uppercase tracking-widest font-black"></span>
+                    <button onclick="handleLogout()" class="text-slate-400 hover:text-red-500 font-bold text-sm">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Statistik -->
+        <div id="dashboardStats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm stat-card" data-access="view_finance">
+                <p class="text-[10px] text-slate-400 uppercase font-black mb-1">Total Omzet</p>
+                <p id="statOmzet" class="text-lg font-bold text-blue-600">Rp 0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm stat-card" data-access="view_finance">
+                <p class="text-[10px] text-slate-400 uppercase font-black mb-1">Total Margin/Laba</p>
+                <p id="statLaba" class="text-lg font-bold text-emerald-600">Rp 0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm stat-card" data-access="view_finance">
+                <p class="text-[10px] text-slate-400 uppercase font-black mb-1">HPP & Supplier</p>
+                <p id="statHpp" class="text-lg font-bold text-orange-600">Rp 0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm border-l-4 border-l-red-500 stat-card" data-access="view_finance">
+                <p class="text-[10px] text-slate-400 uppercase font-black mb-1">Biaya Operasional</p>
+                <p id="statPengeluaran" class="text-lg font-bold text-red-600">Rp 0</p>
+            </div>
+        </div>
+
+        <!-- Navigasi Tab -->
+        <div class="flex border-b mb-6 overflow-x-auto">
+            <button onclick="switchTab('sales')" id="tabSales" class="px-6 py-3 text-sm font-bold tab-active whitespace-nowrap">
+                <i class="fas fa-shopping-cart mr-2"></i>Transaksi
+            </button>
+            <button onclick="switchTab('expenses')" id="tabExpenses" class="px-6 py-3 text-sm font-bold text-slate-500 hover:text-blue-600 whitespace-nowrap only-access" data-access="manage_expenses">
+                <i class="fas fa-wallet mr-2"></i>Biaya & Zakat
+            </button>
+            <button onclick="openStaffManager()" class="px-6 py-3 text-sm font-bold text-slate-500 hover:text-blue-600 whitespace-nowrap only-owner">
+                <i class="fas fa-users-cog mr-2"></i>Kelola Staf
+            </button>
+            <button onclick="openStoreProfile()" class="px-6 py-3 text-sm font-bold text-slate-500 hover:text-blue-600 whitespace-nowrap only-owner">
+                <i class="fas fa-store mr-2"></i>Profil Toko
+            </button>
+        </div>
+
+        <!-- Bagian Transaksi -->
+        <div id="sectionSales">
+            <div class="bg-white p-4 rounded-xl border border-slate-200 mb-6 shadow-sm">
+                <div class="flex flex-col gap-4">
+                    <!-- Row 1: Filter Periode & Transaksi -->
+                    <div class="flex flex-col md:flex-row gap-4 items-end">
+                        <div class="flex-1 w-full grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Periode</label>
+                                <select id="filterTime" onchange="toggleCustomDate(); applyFilters();" class="w-full border p-2 rounded-lg text-sm bg-slate-50">
+                                    <option value="all">Semua Waktu</option>
+                                    <option value="today">Hari Ini</option>
+                                    <option value="thisMonth">Bulan Ini</option>
+                                    <option value="custom">Custom Tanggal</option>
+                                </select>
+                            </div>
+                            <div id="customDateContainer" class="hidden md:col-span-2 grid grid-cols-2 gap-2">
+                                <div><input type="date" id="filterDateStart" onchange="applyFilters()" class="w-full border p-2 rounded-lg text-sm"></div>
+                                <div><input type="date" id="filterDateEnd" onchange="applyFilters()" class="w-full border p-2 rounded-lg text-sm"></div>
+                            </div>
+                        </div>
+                        <button onclick="prepareNewSale()" class="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition only-access" data-access="input_data">
+                            <i class="fas fa-plus"></i> Transaksi Baru
+                        </button>
+                    </div>
+
+                    <!-- Row 2: Filter Lanjutan (Perbaikan yang diminta) -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
+                        <div>
+                            <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Status Pengiriman</label>
+                            <select id="filterShipped" onchange="applyFilters()" class="w-full border p-2 rounded-lg text-sm bg-slate-50">
+                                <option value="all">Semua Status Kirim</option>
+                                <option value="shipped">Sudah Dikirim</option>
+                                <option value="pending">Belum Dikirim</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Bayar Pembeli</label>
+                            <select id="filterPayBuyer" onchange="applyFilters()" class="w-full border p-2 rounded-lg text-sm bg-slate-50">
+                                <option value="all">Semua Status</option>
+                                <option value="paid">Lunas</option>
+                                <option value="debt">Hutang (Belum Lunas)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Bayar Ke Supplier</label>
+                            <select id="filterPaySupplier" onchange="applyFilters()" class="w-full border p-2 rounded-lg text-sm bg-slate-50">
+                                <option value="all">Semua Status</option>
+                                <option value="paid">Lunas</option>
+                                <option value="debt">Belum Lunas</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-slate-200">
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest">
+                            <tr>
+                                <th class="p-4 border-b">Tgl</th>
+                                <th class="p-4 border-b">Produk</th>
+                                <th class="p-4 border-b text-center">Kirim</th>
+                                <th class="p-4 border-b">Pembeli</th>
+                                <th class="p-4 border-b">Supplier</th>
+                                <th class="p-4 border-b text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionTableBody" class="divide-y text-sm"></tbody>
+                    </table>
+                </div>
+                <div id="emptyState" class="hidden p-12 text-center">
+                    <i class="fas fa-search text-slate-200 text-5xl mb-4"></i>
+                    <p class="text-slate-400 text-sm">Belum ada data transaksi yang sesuai filter.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bagian Pengeluaran -->
+        <div id="sectionExpenses" class="hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-slate-800">Biaya Operasional & Zakat</h3>
+                <button onclick="prepareNewExpense()" class="bg-slate-800 text-white px-5 py-2.5 rounded-lg">
+                    <i class="fas fa-plus-circle"></i> Tambah Pengeluaran
+                </button>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm overflow-hidden border border-slate-200">
+                <table class="w-full text-left">
+                    <thead class="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest">
+                        <tr>
+                            <th class="p-4 border-b">Tanggal</th>
+                            <th class="p-4 border-b">Kategori</th>
+                            <th class="p-4 border-b">Jumlah (Rp)</th>
+                            <th class="p-4 border-b">Catatan</th>
+                            <th class="p-4 border-b text-center only-access" data-access="delete_data">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expenseTableBody" class="divide-y text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Transaksi (Sale) -->
+<div id="saleModal" class="modal">
+    <div class="bg-white mx-auto mt-5 p-6 rounded-xl w-full max-w-4xl shadow-2xl">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold" id="saleModalTitle">Form Transaksi</h3>
+            <button onclick="closeModal('saleModal')" class="text-slate-400"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="saleForm" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <input type="hidden" id="editTxIndex" value="-1">
+            
+            <div class="space-y-4">
+                <div class="p-4 bg-slate-50 rounded-lg space-y-3">
+                    <h4 class="text-xs font-black uppercase text-slate-400 tracking-widest">Data Pembeli</h4>
+                    <input type="text" id="fBuyerName" required class="w-full border p-2.5 rounded text-sm access-lock-tx" placeholder="Nama Pembeli">
+                    <input type="text" id="fBuyerPhone" required class="w-full border p-2.5 rounded text-sm access-lock-tx" placeholder="WhatsApp Pembeli">
+                    <textarea id="fBuyerAddress" class="w-full border p-2.5 rounded text-sm h-20 access-lock-tx" placeholder="Alamat Pengiriman"></textarea>
+                </div>
+                
+                <div class="p-4 bg-blue-50 rounded-lg space-y-3">
+                    <h4 class="text-xs font-black uppercase text-blue-400 tracking-widest">Data Produk</h4>
+                    <input type="text" id="fItemName" required class="w-full border p-2.5 rounded text-sm access-lock-tx" placeholder="Nama Produk">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="number" id="fItemQty" value="1" class="border p-2.5 rounded text-sm access-lock-tx" placeholder="Qty">
+                        <input type="text" id="fDiscount" oninput="handleCurrencyInput(this)" class="border p-2.5 rounded text-sm access-lock-pay" placeholder="Diskon (Rp)">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="fPriceCost" oninput="handleCurrencyInput(this)" class="border p-2.5 rounded text-sm access-lock-pay" placeholder="Modal (HPP)">
+                        <input type="text" id="fPriceSale" oninput="handleCurrencyInput(this)" class="border p-2.5 rounded text-sm font-bold text-blue-700 access-lock-pay" placeholder="Harga Jual">
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="p-4 bg-orange-50 rounded-lg space-y-3">
+                    <h4 class="text-xs font-black uppercase text-orange-400 tracking-widest">Status & Pengiriman</h4>
+                    <input type="date" id="fDatePurchase" class="w-full border p-2.5 rounded text-sm">
+                    <div class="flex flex-wrap gap-4 pt-2">
+                        <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" id="fIsReady" checked onchange="toggleSupplierFields()"> Ready Stok</label>
+                        <label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" id="fIsShipped" onchange="toggleShippingFields()"> Sudah Kirim</label>
+                    </div>
+                    <div id="shippingDateContainer" class="hidden mt-2">
+                        <input type="text" id="fResiNumber" class="w-full border p-2.5 rounded text-sm" placeholder="No. Resi">
+                    </div>
+                </div>
+
+                <div id="supplierFieldContainer" class="hidden p-4 bg-purple-50 rounded-lg space-y-3">
+                    <h4 class="text-xs font-black uppercase text-purple-400 tracking-widest">Detail Supplier</h4>
+                    <input type="text" id="fSupplierName" class="w-full border p-2.5 rounded text-sm" placeholder="Nama Supplier">
+                    <input type="text" id="fSupplierPhone" class="w-full border p-2.5 rounded text-sm" placeholder="WA Supplier">
+                </div>
+
+                <div id="paymentSummarySection" class="hidden p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                    <div class="flex justify-between items-center">
+                        <h4 class="text-xs font-black uppercase text-emerald-600 tracking-widest">Histori Bayar</h4>
+                        <button type="button" onclick="openPaymentManager()" class="bg-emerald-600 text-white text-[10px] px-3 py-1.5 rounded-md font-bold hover:bg-emerald-700">
+                            Kelola Cicilan
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" id="submitSaleBtn" class="md:col-span-2 bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-blue-700 transition">Simpan Transaksi</button>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Cicilan -->
+<div id="paymentModal" class="modal">
+    <div class="bg-white mx-auto mt-5 p-6 rounded-xl w-full max-w-2xl shadow-2xl">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Cicilan Pembayaran</h3>
+            <button onclick="closeModal('paymentModal')" class="text-slate-400"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <form id="paymentItemForm" class="space-y-3">
+                    <select id="payTo" class="w-full border p-2 rounded text-sm">
+                        <option value="buyer">Dari Pembeli</option>
+                        <option value="supplier">Ke Supplier</option>
+                    </select>
+                    <input type="datetime-local" id="payDateTime" class="w-full border p-2 rounded text-sm" required>
+                    <input type="text" id="payAmount" oninput="handleCurrencyInput(this)" class="w-full border p-2 rounded text-sm font-bold" placeholder="Jumlah (Rp)">
+                    <button type="button" onclick="addPaymentItem()" class="w-full bg-emerald-600 text-white py-2.5 rounded-lg font-bold text-sm">Tambah</button>
+                </form>
+            </div>
+            <div id="paymentItemList" class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Profil Toko -->
+<div id="storeProfileModal" class="modal">
+    <div class="bg-white mx-auto mt-10 p-6 rounded-xl w-full max-w-md shadow-2xl">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Profil Toko</h3>
+            <button onclick="closeModal('storeProfileModal')" class="text-gray-400"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="space-y-4">
+            <input type="text" id="pStoreName" class="w-full border p-3 rounded-lg text-sm bg-slate-50" placeholder="Nama Toko">
+            <input type="text" id="pStorePhone" class="w-full border p-3 rounded-lg text-sm bg-slate-50" placeholder="WA Toko">
+            <textarea id="pStoreAddress" class="w-full border p-3 rounded-lg text-sm h-24 bg-slate-50" placeholder="Alamat Toko"></textarea>
+            <button onclick="saveStoreProfile()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold shadow-lg">Simpan</button>
+        </div>
+    </div>
+</div>
+
+<div id="printArea" class="hidden"></div>
+
+<script>
+    const OWNER_USER = 'bisnisberkah';
+    const OWNER_PASS = 'suhada';
+    
+    let db = JSON.parse(localStorage.getItem('berkah_v16_deploy')) || {
+        transactions: [],
+        expenses: [],
+        users: [{ 
+            user: OWNER_USER, pass: OWNER_PASS, role: 'owner',
+            access: { view_finance: true, input_data: true, edit_tx: true, edit_pay: true, manage_expenses: true, delete_data: true }
+        }],
+        config: { name: 'Bisnis Berkah', phone: '08123456789', address: 'Jl. Berkah No. 1' }
+    };
+    
+    let currentUser = null;
+    let currentActivePayments = []; 
+
+    window.onload = () => { updateStoreNameUI(); };
+
+    function saveDB() {
+        localStorage.setItem('berkah_v16_deploy', JSON.stringify(db));
+        updateUI();
+    }
+
+    // --- LOGIN ---
+    function handleLogin() {
+        const u = document.getElementById('usernameInput').value;
+        const p = document.getElementById('passwordInput').value;
+        const user = db.users.find(x => x.user === u && x.pass === p);
+        if (user) {
+            currentUser = user;
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            document.getElementById('userDisplay').innerText = user.user;
+            applyAccessUI(); updateUI();
+        } else { document.getElementById('loginError').classList.remove('hidden'); }
+    }
+
+    function applyAccessUI() {
+        const isOwner = currentUser.role === 'owner';
+        document.querySelectorAll('.only-owner').forEach(el => el.style.display = isOwner ? 'block' : 'none');
+        document.querySelectorAll('.only-access').forEach(el => {
+            const acc = el.getAttribute('data-access');
+            el.classList.toggle('hidden', currentUser.access && !currentUser.access[acc]);
+        });
+        document.querySelectorAll('.stat-card').forEach(el => {
+            el.classList.toggle('hidden', currentUser.access && !currentUser.access.view_finance);
+        });
+    }
+
+    // --- DASHBOARD ---
+    function updateUI() {
+        if (!currentUser) return;
+        renderTransactions();
+        if(currentUser.access.view_finance) {
+            let totalOmzet = 0, totalHpp = 0, totalExp = 0;
+            db.transactions.forEach(t => {
+                totalOmzet += (t.priceSale * t.itemQty) - (t.discount || 0);
+                totalHpp += (t.priceCost * t.itemQty);
+            });
+            db.expenses.forEach(e => totalExp += e.amount);
+            document.getElementById('statOmzet').innerText = `Rp ${formatNumber(totalOmzet)}`;
+            document.getElementById('statHpp').innerText = `Rp ${formatNumber(totalHpp)}`;
+            document.getElementById('statPengeluaran').innerText = `Rp ${formatNumber(totalExp)}`;
+            document.getElementById('statLaba').innerText = `Rp ${formatNumber(totalOmzet - totalHpp - totalExp)}`;
+        }
+    }
+
+    function renderTransactions() {
+        const tbody = document.getElementById('transactionTableBody');
+        tbody.innerHTML = '';
+        
+        const fTime = document.getElementById('filterTime').value;
+        const fShipped = document.getElementById('filterShipped').value;
+        const fPayB = document.getElementById('filterPayBuyer').value;
+        const fPayS = document.getElementById('filterPaySupplier').value;
+        
+        const filtered = db.transactions.filter(t => {
+            const txDate = new Date(t.datePurchase);
+            const now = new Date();
+            let pTime = true;
+            if (fTime === 'today') pTime = txDate.toDateString() === now.toDateString();
+            else if (fTime === 'thisMonth') pTime = txDate.getMonth() === now.getMonth();
+            else if (fTime === 'custom') {
+                const s = document.getElementById('filterDateStart').value;
+                const e = document.getElementById('filterDateEnd').value;
+                if(s) pTime = pTime && (t.datePurchase >= s);
+                if(e) pTime = pTime && (t.datePurchase <= e);
+            }
+
+            let pShip = true;
+            if(fShipped === 'shipped') pShip = t.isShipped;
+            if(fShipped === 'pending') pShip = !t.isShipped;
+
+            const netB = (t.priceSale * t.itemQty) - (t.discount || 0);
+            const paidB = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
+            const isLunasB = paidB >= netB;
+            let pPayB = true;
+            if(fPayB === 'paid') pPayB = isLunasB;
+            if(fPayB === 'debt') pPayB = !isLunasB;
+
+            const hppS = (t.priceCost * t.itemQty);
+            const paidS = (t.payments || []).filter(p => p.type === 'supplier').reduce((s, p) => s + p.amount, 0);
+            const isLunasS = paidS >= hppS;
+            let pPayS = true;
+            if(fPayS === 'paid') pPayS = isLunasS;
+            if(fPayS === 'debt') pPayS = !isLunasS;
+
+            return pTime && pShip && pPayB && pPayS;
+        });
+
+        document.getElementById('emptyState').classList.toggle('hidden', filtered.length > 0);
+
+        filtered.forEach((t, i) => {
+            const net = (t.priceSale * t.itemQty) - (t.discount || 0);
+            const paid = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
+            const lunas = paid >= net;
+
+            tbody.innerHTML += `
+                <tr class="hover:bg-slate-50">
+                    <td class="p-4 border-b text-[10px] font-mono">${t.datePurchase}</td>
+                    <td class="p-4 border-b">
+                        <div class="font-bold">${t.itemName}</div>
+                        <div class="text-[9px] ${t.isReady ? 'text-blue-500' : 'text-orange-500'}">${t.isReady ? 'Ready' : 'PO'}</div>
+                    </td>
+                    <td class="p-4 border-b text-center">
+                        ${t.isShipped ? '<i class="fas fa-check-circle text-emerald-500"></i>' : '<i class="fas fa-clock text-slate-300"></i>'}
+                    </td>
+                    <td class="p-4 border-b">
+                        <div class="font-bold">${t.buyerName}</div>
+                        <div class="text-[9px] ${lunas ? 'text-emerald-500' : 'text-red-500'} font-black uppercase">
+                            ${lunas ? 'Lunas' : 'Rp ' + formatNumber(net - paid)}
+                        </div>
+                    </td>
+                    <td class="p-4 border-b">
+                        <div class="text-xs">${t.supplierName || '-'}</div>
+                    </td>
+                    <td class="p-4 border-b text-center space-x-2">
+                        <button onclick="editTx(${db.transactions.indexOf(t)})" class="text-slate-400 hover:text-blue-600"><i class="fas fa-edit"></i></button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    // --- ACTIONS ---
+    function prepareNewSale() {
+        document.getElementById('saleForm').reset();
+        document.getElementById('editTxIndex').value = "-1";
+        document.getElementById('fDatePurchase').value = new Date().toISOString().split('T')[0];
+        document.getElementById('paymentSummarySection').classList.add('hidden');
+        currentActivePayments = [];
+        toggleSupplierFields(); toggleShippingFields(); openModal('saleModal');
+    }
+
+    function editTx(i) {
+        const t = db.transactions[i];
+        document.getElementById('editTxIndex').value = i;
+        document.getElementById('fBuyerName').value = t.buyerName;
+        document.getElementById('fBuyerPhone').value = t.buyerPhone;
+        document.getElementById('fBuyerAddress').value = t.buyerAddress;
+        document.getElementById('fItemName').value = t.itemName;
+        document.getElementById('fItemQty').value = t.itemQty;
+        document.getElementById('fPriceSale').value = formatInput(t.priceSale);
+        document.getElementById('fPriceCost').value = formatInput(t.priceCost);
+        document.getElementById('fDiscount').value = formatInput(t.discount || 0);
+        document.getElementById('fDatePurchase').value = t.datePurchase;
+        document.getElementById('fIsReady').checked = t.isReady;
+        document.getElementById('fIsShipped').checked = t.isShipped;
+        document.getElementById('fResiNumber').value = t.resi || ""; 
+        document.getElementById('fSupplierName').value = t.supplierName || "";
+        document.getElementById('fSupplierPhone').value = t.supplierPhone || "";
+        currentActivePayments = t.payments ? [...t.payments] : [];
+        document.getElementById('paymentSummarySection').classList.remove('hidden');
+        toggleSupplierFields(); toggleShippingFields(); openModal('saleModal');
+    }
+
+    document.getElementById('saleForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const idx = parseInt(document.getElementById('editTxIndex').value);
+        const data = {
+            buyerName: document.getElementById('fBuyerName').value,
+            buyerPhone: document.getElementById('fBuyerPhone').value,
+            buyerAddress: document.getElementById('fBuyerAddress').value,
+            itemName: document.getElementById('fItemName').value,
+            itemQty: Number(document.getElementById('fItemQty').value),
+            priceSale: Number(unformatInput(document.getElementById('fPriceSale').value)),
+            priceCost: Number(unformatInput(document.getElementById('fPriceCost').value)),
+            discount: Number(unformatInput(document.getElementById('fDiscount').value)),
+            isReady: document.getElementById('fIsReady').checked,
+            isShipped: document.getElementById('fIsShipped').checked,
+            datePurchase: document.getElementById('fDatePurchase').value,
+            resi: document.getElementById('fResiNumber').value, 
+            supplierName: document.getElementById('fSupplierName').value,
+            supplierPhone: document.getElementById('fSupplierPhone').value,
+            payments: currentActivePayments 
+        };
+        if(idx > -1) db.transactions[idx] = data; else db.transactions.unshift(data);
+        saveDB(); closeModal('saleModal');
+    });
+
+    function openPaymentManager() {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('payDateTime').value = now.toISOString().slice(0, 16);
+        renderPaymentItems();
+        openModal('paymentModal');
+    }
+
+    function addPaymentItem() {
+        const amount = Number(unformatInput(document.getElementById('payAmount').value));
+        if(amount <= 0) return;
+        currentActivePayments.push({
+            type: document.getElementById('payTo').value,
+            dateTime: document.getElementById('payDateTime').value,
+            amount: amount,
+            bank: 'Transfer'
+        });
+        document.getElementById('payAmount').value = "";
+        renderPaymentItems();
+    }
+
+    function renderPaymentItems() {
+        const list = document.getElementById('paymentItemList');
+        list.innerHTML = '';
+        currentActivePayments.forEach((p, i) => {
+            list.innerHTML += `
+                <div class="bg-white border p-2 rounded text-xs flex justify-between items-center">
+                    <div>
+                        <span class="font-black ${p.type === 'buyer' ? 'text-emerald-500' : 'text-purple-500'} uppercase text-[8px]">${p.type}</span>
+                        <div>Rp ${formatNumber(p.amount)}</div>
+                    </div>
+                    <button onclick="currentActivePayments.splice(${i}, 1); renderPaymentItems();" class="text-red-400"><i class="fas fa-trash"></i></button>
+                </div>
+            `;
+        });
+    }
+
+    // --- UTILS ---
+    function formatNumber(n) { return new Intl.NumberFormat('id-ID').format(n || 0); }
+    function unformatInput(v) { return v ? v.toString().replace(/\./g, "") : 0; }
+    function formatInput(v) { return v.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
+    function handleCurrencyInput(e) { e.value = formatInput(e.value); }
+    function openModal(id) { document.getElementById(id).style.display = 'block'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function toggleSupplierFields() { document.getElementById('supplierFieldContainer').classList.toggle('hidden', document.getElementById('fIsReady').checked); }
+    function toggleShippingFields() { document.getElementById('shippingDateContainer').classList.toggle('hidden', !document.getElementById('fIsShipped').checked); }
+    function toggleCustomDate() { document.getElementById('customDateContainer').classList.toggle('hidden', document.getElementById('filterTime').value !== 'custom'); }
+    function applyFilters() { updateUI(); }
+    function switchTab(t) {
+        document.getElementById('sectionSales').classList.toggle('hidden', t !== 'sales');
+        document.getElementById('sectionExpenses').classList.toggle('hidden', t !== 'expenses');
+    }
+    function updateStoreNameUI() {
+        const n = db.config.name || 'Bisnis Berkah';
+        document.getElementById('storeNameLabel').innerText = n;
+        document.getElementById('loginStoreName').innerText = n;
+    }
+</script>
+</body>
+</html>

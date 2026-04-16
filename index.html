@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistem Penjualan Berkah</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -227,7 +228,7 @@
 </div>
 
 <div id="printLabelModal" class="modal">
-    <div class="bg-white mx-auto mt-20 p-6 rounded-xl w-full max-w-sm shadow-2xl">
+    <div class="bg-white mx-auto mt-20 p-6 rounded-xl w-full max-sm shadow-2xl">
         <h3 class="text-lg font-bold mb-4">Opsi Cetak Label</h3>
         <div class="space-y-4">
             <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer">
@@ -409,10 +410,16 @@
 <div id="printArea" class="hidden"></div>
 
 <script>
+    // Konfigurasi Client Supabase
+    const supabaseUrl = 'https://gyfrjpqrrgbnflzaqexd.supabase.co';
+    const supabaseKey = 'sb_publishable_I9-LCXA4DXpqsL-CC4XU5w_qANg2V1q';
+    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
     const OWNER_USER = 'bisnisberkah';
     const OWNER_PASS = 'suhada';
     
-    let db = JSON.parse(localStorage.getItem('berkah_v16_deploy')) || {
+    // Inisialisasi struktur DB lokal
+    let db = {
         transactions: [],
         expenses: [],
         users: [{ 
@@ -425,11 +432,48 @@
     let currentUser = null;
     let currentActivePayments = []; 
 
-    window.onload = () => { updateStoreNameUI(); };
+    window.onload = async () => { 
+        await loadData();
+        updateStoreNameUI(); 
+    };
 
-    function saveDB() {
-        localStorage.setItem('berkah_v16_deploy', JSON.stringify(db));
-        updateUI();
+    // Fungsi Fetch Data dari Cloud
+    async function loadData() {
+        try {
+            // Ambil Config Toko
+            const { data: configData } = await supabase.from('store_config').select('*').single();
+            if(configData) db.config = configData;
+
+            // Ambil Transaksi
+            const { data: txData } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
+            if(txData) db.transactions = txData;
+
+            // Ambil Pengeluaran
+            const { data: expData } = await supabase.from('expenses').select('*').order('date', { ascending: false });
+            if(expData) db.expenses = expData;
+
+            // Ambil Users
+            const { data: userData } = await supabase.from('users').select('*');
+            if(userData && userData.length > 0) db.users = userData;
+
+            updateUI();
+        } catch (err) {
+            console.error("Gagal memuat data:", err);
+        }
+    }
+
+    // Fungsi saveDB yang baru (Kirim ke Cloud)
+    async function saveDB(table, data) {
+        const { error } = await supabase
+            .from(table)
+            .upsert(data);
+
+        if (error) {
+            console.error(`Gagal simpan ke ${table}:`, error);
+            alert(`Gagal menyimpan ${table} ke cloud!`);
+        } else {
+            await loadData(); // Segarkan data lokal dan tampilan
+        }
     }
 
     function handleLogin() {
@@ -616,8 +660,6 @@
         });
     }
 
-    // --- FITUR CETAK ---
-
     function openPrintLabel(index) {
         document.getElementById('printLabelIndex').value = index;
         openModal('printLabelModal');
@@ -743,8 +785,6 @@
         window.print();
     }
 
-    // --- SISA KODE (RETAINED) ---
-
     function renderExpenses() {
         const tbody = document.getElementById('expenseTableBody');
         if (!tbody) return;
@@ -764,10 +804,15 @@
         });
     }
 
-    function deleteExpense(i) {
+    async function deleteExpense(i) {
         if(confirm('Hapus data pengeluaran ini?')) {
-            db.expenses.splice(i, 1);
-            saveDB();
+            const expToDelete = db.expenses[i];
+            const { error } = await supabase
+                .from('expenses')
+                .delete()
+                .eq('id', expToDelete.id); // Asumsi tabel memiliki kolom 'id'
+            
+            if(!error) await loadData();
         }
     }
 
@@ -777,7 +822,7 @@
         openModal('expenseModal');
     }
 
-    document.getElementById('expenseForm').addEventListener('submit', (e) => {
+    document.getElementById('expenseForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const data = {
             date: document.getElementById('eDate').value,
@@ -785,18 +830,17 @@
             amount: Number(unformatInput(document.getElementById('eAmount').value)),
             note: document.getElementById('eNote').value
         };
-        db.expenses.unshift(data);
-        saveDB();
+        await saveDB('expenses', data);
         closeModal('expenseModal');
     });
 
     function openStaffManager() { renderStaffList(); openModal('staffModal'); }
 
-    function addStaff() {
+    async function addStaff() {
         const u = document.getElementById('sUsername').value;
         const p = document.getElementById('sPassword').value;
         if(!u || !p) return;
-        db.users.push({
+        const data = {
             user: u, pass: p, role: 'staff',
             access: {
                 view_finance: document.getElementById('sAccFinance').checked,
@@ -805,8 +849,9 @@
                 delete_data: document.getElementById('sAccDelete').checked,
                 edit_tx: true, edit_pay: true
             }
-        });
-        saveDB(); renderStaffList();
+        };
+        await saveDB('users', data);
+        renderStaffList();
     }
 
     function renderStaffList() {
@@ -815,9 +860,16 @@
         db.users.filter(u => u.role !== 'owner').forEach((u, i) => {
             list.innerHTML += `<div class="bg-white border p-3 rounded-lg flex justify-between items-center shadow-sm">
                 <div><div class="font-bold text-blue-600">${u.user}</div></div>
-                <button onclick="db.users.splice(db.users.indexOf(${JSON.stringify(u)}), 1); saveDB(); renderStaffList();" class="text-red-400"><i class="fas fa-trash"></i></button>
+                <button onclick="handleDeleteUser('${u.user}')" class="text-red-400"><i class="fas fa-trash"></i></button>
             </div>`;
         });
+    }
+
+    async function handleDeleteUser(username) {
+        if(confirm('Hapus staf ini?')) {
+            const { error } = await supabase.from('users').delete().eq('user', username);
+            if(!error) await loadData();
+        }
     }
 
     function prepareNewSale() {
@@ -851,7 +903,7 @@
         toggleSupplierFields(); toggleShippingFields(); openModal('saleModal');
     }
 
-    document.getElementById('saleForm').addEventListener('submit', (e) => {
+    document.getElementById('saleForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const idx = parseInt(document.getElementById('editTxIndex').value);
         const data = {
@@ -871,8 +923,12 @@
             supplierPhone: document.getElementById('fSupplierPhone').value,
             payments: currentActivePayments 
         };
-        if(idx > -1) db.transactions[idx] = data; else db.transactions.unshift(data);
-        saveDB(); closeModal('saleModal');
+        
+        // Jika sedang edit, tambahkan ID agar upsert mengenali data lama
+        if(idx > -1) data.id = db.transactions[idx].id;
+
+        await saveDB('transactions', data);
+        closeModal('saleModal');
     });
 
     function openPaymentManager() {
@@ -926,18 +982,26 @@
     }
 
     function showFullImage(src) { document.getElementById('fullSizeImg').src = src; openModal('imagePreviewModal'); }
+    
     function openStoreProfile() {
         document.getElementById('pStoreName').value = db.config.name || '';
         document.getElementById('pStorePhone').value = db.config.phone || '';
         document.getElementById('pStoreAddress').value = db.config.address || '';
         openModal('storeProfileModal');
     }
-    function saveStoreProfile() {
-        db.config.name = document.getElementById('pStoreName').value;
-        db.config.phone = document.getElementById('pStorePhone').value;
-        db.config.address = document.getElementById('pStoreAddress').value;
-        saveDB(); updateStoreNameUI(); closeModal('storeProfileModal');
+    
+    async function saveStoreProfile() {
+        const data = {
+            id: 1, // Asumsi row tunggal dengan ID 1
+            name: document.getElementById('pStoreName').value,
+            phone: document.getElementById('pStorePhone').value,
+            address: document.getElementById('pStoreAddress').value
+        };
+        await saveDB('store_config', data);
+        updateStoreNameUI(); 
+        closeModal('storeProfileModal');
     }
+
     function formatNumber(n) { return new Intl.NumberFormat('id-ID').format(Math.round(n || 0)); }
     function unformatInput(v) { return v ? v.toString().replace(/\./g, "") : 0; }
     function formatInput(v) { return v.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, "."); }

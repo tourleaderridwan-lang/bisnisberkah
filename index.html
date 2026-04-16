@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistem Penjualan Berkah</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
@@ -228,7 +228,7 @@
 </div>
 
 <div id="printLabelModal" class="modal">
-    <div class="bg-white mx-auto mt-20 p-6 rounded-xl w-full max-sm shadow-2xl">
+    <div class="bg-white mx-auto mt-20 p-6 rounded-xl w-full max-w-sm shadow-2xl">
         <h3 class="text-lg font-bold mb-4">Opsi Cetak Label</h3>
         <div class="space-y-4">
             <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer">
@@ -410,15 +410,15 @@
 <div id="printArea" class="hidden"></div>
 
 <script>
-    // Konfigurasi Client Supabase
-    const supabaseUrl = 'https://gyfrjpqrrgbnflzaqexd.supabase.co';
-    const supabaseKey = 'sb_publishable_I9-LCXA4DXpqsL-CC4XU5w_qANg2V1q';
-    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+    // --- KONFIGURASI SUPABASE ---
+    const SUPABASE_URL = 'https://gyfrjpqrrgbnflzaqexd.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_I9-LCXA4DXpqsL-CC4XU5w_qANg2V1q';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const OWNER_USER = 'bisnisberkah';
     const OWNER_PASS = 'suhada';
     
-    // Inisialisasi struktur DB lokal
+    // Objek awal (Default)
     let db = {
         transactions: [],
         expenses: [],
@@ -432,49 +432,57 @@
     let currentUser = null;
     let currentActivePayments = []; 
 
-    window.onload = async () => { 
-        await loadData();
-        updateStoreNameUI(); 
+    // --- LOGIKA DATABASE SUPABASE ---
+
+    async function loadDB() {
+        try {
+            const { data, error } = await supabaseClient
+                .from('berkah_app')
+                .select('content')
+                .eq('id', 1)
+                .single();
+
+            if (data && data.content) {
+                db = data.content;
+                console.log("Data berhasil dimuat dari Cloud.");
+            } else {
+                console.log("Database kosong, menggunakan data default.");
+                await saveDB(); // Buat baris pertama di cloud
+            }
+        } catch (err) {
+            console.error("Gagal load data:", err);
+            // Fallback ke LocalStorage jika internet bermasalah
+            const local = localStorage.getItem('berkah_v16_deploy');
+            if(local) db = JSON.parse(local);
+        }
+        updateStoreNameUI();
+        updateUI();
+    }
+
+    async function saveDB() {
+        // Simpan ke LocalStorage sebagai backup
+        localStorage.setItem('berkah_v16_deploy', JSON.stringify(db));
+        
+        // Update UI secara instan
+        updateUI();
+
+        // Kirim ke Cloud Supabase
+        try {
+            const { error } = await supabaseClient
+                .from('berkah_app')
+                .upsert({ id: 1, content: db });
+
+            if (error) throw error;
+        } catch (err) {
+            console.error("Gagal sinkronisasi ke Supabase:", err);
+        }
+    }
+
+    window.onload = () => { 
+        loadDB(); // Panggil data dari Supabase saat startup
     };
 
-    // Fungsi Fetch Data dari Cloud
-    async function loadData() {
-        try {
-            // Ambil Config Toko
-            const { data: configData } = await supabase.from('store_config').select('*').single();
-            if(configData) db.config = configData;
-
-            // Ambil Transaksi
-            const { data: txData } = await supabase.from('transactions').select('*').order('created_at', { ascending: false });
-            if(txData) db.transactions = txData;
-
-            // Ambil Pengeluaran
-            const { data: expData } = await supabase.from('expenses').select('*').order('date', { ascending: false });
-            if(expData) db.expenses = expData;
-
-            // Ambil Users
-            const { data: userData } = await supabase.from('users').select('*');
-            if(userData && userData.length > 0) db.users = userData;
-
-            updateUI();
-        } catch (err) {
-            console.error("Gagal memuat data:", err);
-        }
-    }
-
-    // Fungsi saveDB yang baru (Kirim ke Cloud)
-    async function saveDB(table, data) {
-        const { error } = await supabase
-            .from(table)
-            .upsert(data);
-
-        if (error) {
-            console.error(`Gagal simpan ke ${table}:`, error);
-            alert(`Gagal menyimpan ${table} ke cloud!`);
-        } else {
-            await loadData(); // Segarkan data lokal dan tampilan
-        }
-    }
+    // --- SISA KODE ASLI (TIDAK BERUBAH) ---
 
     function handleLogin() {
         const u = document.getElementById('usernameInput').value;
@@ -804,15 +812,10 @@
         });
     }
 
-    async function deleteExpense(i) {
+    function deleteExpense(i) {
         if(confirm('Hapus data pengeluaran ini?')) {
-            const expToDelete = db.expenses[i];
-            const { error } = await supabase
-                .from('expenses')
-                .delete()
-                .eq('id', expToDelete.id); // Asumsi tabel memiliki kolom 'id'
-            
-            if(!error) await loadData();
+            db.expenses.splice(i, 1);
+            saveDB();
         }
     }
 
@@ -822,7 +825,7 @@
         openModal('expenseModal');
     }
 
-    document.getElementById('expenseForm').addEventListener('submit', async (e) => {
+    document.getElementById('expenseForm').addEventListener('submit', (e) => {
         e.preventDefault();
         const data = {
             date: document.getElementById('eDate').value,
@@ -830,17 +833,18 @@
             amount: Number(unformatInput(document.getElementById('eAmount').value)),
             note: document.getElementById('eNote').value
         };
-        await saveDB('expenses', data);
+        db.expenses.unshift(data);
+        saveDB();
         closeModal('expenseModal');
     });
 
     function openStaffManager() { renderStaffList(); openModal('staffModal'); }
 
-    async function addStaff() {
+    function addStaff() {
         const u = document.getElementById('sUsername').value;
         const p = document.getElementById('sPassword').value;
         if(!u || !p) return;
-        const data = {
+        db.users.push({
             user: u, pass: p, role: 'staff',
             access: {
                 view_finance: document.getElementById('sAccFinance').checked,
@@ -849,9 +853,8 @@
                 delete_data: document.getElementById('sAccDelete').checked,
                 edit_tx: true, edit_pay: true
             }
-        };
-        await saveDB('users', data);
-        renderStaffList();
+        });
+        saveDB(); renderStaffList();
     }
 
     function renderStaffList() {
@@ -860,16 +863,9 @@
         db.users.filter(u => u.role !== 'owner').forEach((u, i) => {
             list.innerHTML += `<div class="bg-white border p-3 rounded-lg flex justify-between items-center shadow-sm">
                 <div><div class="font-bold text-blue-600">${u.user}</div></div>
-                <button onclick="handleDeleteUser('${u.user}')" class="text-red-400"><i class="fas fa-trash"></i></button>
+                <button onclick="db.users.splice(db.users.indexOf(${JSON.stringify(u)}), 1); saveDB(); renderStaffList();" class="text-red-400"><i class="fas fa-trash"></i></button>
             </div>`;
         });
-    }
-
-    async function handleDeleteUser(username) {
-        if(confirm('Hapus staf ini?')) {
-            const { error } = await supabase.from('users').delete().eq('user', username);
-            if(!error) await loadData();
-        }
     }
 
     function prepareNewSale() {
@@ -903,7 +899,7 @@
         toggleSupplierFields(); toggleShippingFields(); openModal('saleModal');
     }
 
-    document.getElementById('saleForm').addEventListener('submit', async (e) => {
+    document.getElementById('saleForm').addEventListener('submit', (e) => {
         e.preventDefault();
         const idx = parseInt(document.getElementById('editTxIndex').value);
         const data = {
@@ -923,12 +919,8 @@
             supplierPhone: document.getElementById('fSupplierPhone').value,
             payments: currentActivePayments 
         };
-        
-        // Jika sedang edit, tambahkan ID agar upsert mengenali data lama
-        if(idx > -1) data.id = db.transactions[idx].id;
-
-        await saveDB('transactions', data);
-        closeModal('saleModal');
+        if(idx > -1) db.transactions[idx] = data; else db.transactions.unshift(data);
+        saveDB(); closeModal('saleModal');
     });
 
     function openPaymentManager() {
@@ -982,26 +974,18 @@
     }
 
     function showFullImage(src) { document.getElementById('fullSizeImg').src = src; openModal('imagePreviewModal'); }
-    
     function openStoreProfile() {
         document.getElementById('pStoreName').value = db.config.name || '';
         document.getElementById('pStorePhone').value = db.config.phone || '';
         document.getElementById('pStoreAddress').value = db.config.address || '';
         openModal('storeProfileModal');
     }
-    
-    async function saveStoreProfile() {
-        const data = {
-            id: 1, // Asumsi row tunggal dengan ID 1
-            name: document.getElementById('pStoreName').value,
-            phone: document.getElementById('pStorePhone').value,
-            address: document.getElementById('pStoreAddress').value
-        };
-        await saveDB('store_config', data);
-        updateStoreNameUI(); 
-        closeModal('storeProfileModal');
+    function saveStoreProfile() {
+        db.config.name = document.getElementById('pStoreName').value;
+        db.config.phone = document.getElementById('pStorePhone').value;
+        db.config.address = document.getElementById('pStoreAddress').value;
+        saveDB(); updateStoreNameUI(); closeModal('storeProfileModal');
     }
-
     function formatNumber(n) { return new Intl.NumberFormat('id-ID').format(Math.round(n || 0)); }
     function unformatInput(v) { return v ? v.toString().replace(/\./g, "") : 0; }
     function formatInput(v) { return v.toString().replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
@@ -1022,8 +1006,10 @@
     }
     function updateStoreNameUI() {
         const n = db.config.name || 'Bisnis Berkah';
-        document.getElementById('storeNameLabel').innerText = n;
-        document.getElementById('loginStoreName').innerText = n;
+        const storeLabel = document.getElementById('storeNameLabel');
+        const loginLabel = document.getElementById('loginStoreName');
+        if(storeLabel) storeLabel.innerText = n;
+        if(loginLabel) loginLabel.innerText = n;
     }
     function handleLogout() { currentUser = null; document.getElementById('mainApp').classList.add('hidden'); document.getElementById('loginPage').classList.remove('hidden'); }
 </script>

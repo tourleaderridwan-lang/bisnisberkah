@@ -256,14 +256,18 @@
             <div class="space-y-4">
                 <div class="p-4 bg-slate-50 rounded-lg space-y-3">
                     <h4 class="text-xs font-black uppercase text-slate-400 tracking-widest">Data Pembeli</h4>
-                    <input type="text" id="fBuyerName" required class="w-full border p-2.5 rounded text-sm access-lock-tx" placeholder="Nama Pembeli">
+                    <input type="text" id="fBuyerName" list="listBuyerNames" oninput="handleAutoFillBuyer(this.value)" required class="w-full border p-2.5 rounded text-sm access-lock-tx" placeholder="Nama Pembeli">
+                    <datalist id="listBuyerNames"></datalist>
+                    
                     <input type="text" id="fBuyerPhone" required class="w-full border p-2.5 rounded text-sm access-lock-tx" placeholder="WhatsApp Pembeli">
                     <textarea id="fBuyerAddress" class="w-full border p-2.5 rounded text-sm h-20 access-lock-tx" placeholder="Alamat Pengiriman"></textarea>
                 </div>
                 
                 <div class="p-4 bg-blue-50 rounded-lg space-y-3">
                     <h4 class="text-xs font-black uppercase text-blue-400 tracking-widest">Data Produk</h4>
-                    <input type="text" id="fItemName" required class="w-full border p-2.5 rounded text-sm access-lock-tx" placeholder="Nama Produk">
+                    <input type="text" id="fItemName" list="listItemNames" required class="w-full border p-2.5 rounded text-sm access-lock-tx" placeholder="Nama Produk">
+                    <datalist id="listItemNames"></datalist>
+                    
                     <div class="grid grid-cols-2 gap-2">
                         <input type="number" id="fItemQty" value="1" class="border p-2.5 rounded text-sm access-lock-tx" placeholder="Qty">
                         <input type="text" id="fDiscount" oninput="handleCurrencyInput(this)" class="border p-2.5 rounded text-sm access-lock-pay" placeholder="Diskon (Rp)">
@@ -290,7 +294,9 @@
 
                 <div id="supplierFieldContainer" class="hidden p-4 bg-purple-50 rounded-lg space-y-3">
                     <h4 class="text-xs font-black uppercase text-purple-400 tracking-widest">Detail Supplier</h4>
-                    <input type="text" id="fSupplierName" class="w-full border p-2.5 rounded text-sm" placeholder="Nama Supplier">
+                    <input type="text" id="fSupplierName" list="listSupplierNames" oninput="handleAutoFillSupplier(this.value)" class="w-full border p-2.5 rounded text-sm" placeholder="Nama Supplier">
+                    <datalist id="listSupplierNames"></datalist>
+                    
                     <input type="text" id="fSupplierPhone" class="w-full border p-2.5 rounded text-sm" placeholder="WA Supplier">
                 </div>
 
@@ -457,6 +463,7 @@
         }
         updateStoreNameUI();
         updateUI();
+        refreshDatalists(); // Perbarui datalist suggestion saat load
     }
 
     async function saveDB() {
@@ -465,6 +472,7 @@
         
         // Update UI secara instan
         updateUI();
+        refreshDatalists(); // Perbarui datalist saat ada perubahan data
 
         // Kirim ke Cloud Supabase
         try {
@@ -482,7 +490,48 @@
         loadDB(); // Panggil data dari Supabase saat startup
     };
 
-    // --- SISA KODE ASLI (TIDAK BERUBAH) ---
+    // --- LOGIKA AUTO-FILL & SUGGESTION ---
+
+    function refreshDatalists() {
+        // Ambil data unik dari transaksi
+        const products = [...new Set(db.transactions.map(t => t.itemName))];
+        const buyers = [...new Set(db.transactions.map(t => t.buyerName))];
+        const suppliers = [...new Set(db.transactions.map(t => t.supplierName).filter(s => s))];
+
+        updateDatalist('listItemNames', products);
+        updateDatalist('listBuyerNames', buyers);
+        updateDatalist('listSupplierNames', suppliers);
+    }
+
+    function updateDatalist(id, items) {
+        const dl = document.getElementById(id);
+        if(!dl) return;
+        dl.innerHTML = '';
+        items.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item;
+            dl.appendChild(opt);
+        });
+    }
+
+    function handleAutoFillBuyer(name) {
+        if(!name) return;
+        const history = db.transactions.find(t => t.buyerName.toLowerCase() === name.toLowerCase());
+        if(history) {
+            document.getElementById('fBuyerPhone').value = history.buyerPhone || '';
+            document.getElementById('fBuyerAddress').value = history.buyerAddress || '';
+        }
+    }
+
+    function handleAutoFillSupplier(name) {
+        if(!name) return;
+        const history = db.transactions.find(t => t.supplierName && t.supplierName.toLowerCase() === name.toLowerCase());
+        if(history) {
+            document.getElementById('fSupplierPhone').value = history.supplierPhone || '';
+        }
+    }
+
+    // --- SISA KODE ASLI ---
 
     function handleLogin() {
         const u = document.getElementById('usernameInput').value;

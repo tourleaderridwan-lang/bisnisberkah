@@ -32,14 +32,19 @@
         @media print {
             body * { visibility: hidden; }
             #printArea, #printArea * { visibility: visible; }
-            #printArea { position: absolute; left: 0; top: 0; width: 100%; }
+            #printArea { 
+                position: absolute; 
+                left: 0; 
+                top: 0; 
+                width: 100%; 
+                display: block !important;
+            }
             .no-print { display: none !important; }
         }
     </style>
 </head>
 <body class="bg-slate-50">
 
-<!-- Halaman Login -->
 <div id="loginPage" class="min-h-screen flex items-center justify-center p-4">
     <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
         <div class="text-center mb-8">
@@ -61,7 +66,6 @@
     </div>
 </div>
 
-<!-- Aplikasi Utama -->
 <div id="mainApp" class="hidden">
     <nav class="bg-white border-b sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -78,7 +82,6 @@
     </nav>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <!-- Statistik Terupdate -->
         <div id="dashboardStats" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm stat-card" data-access="view_finance">
                 <p class="text-[10px] text-slate-400 uppercase font-black mb-1">Total Omzet</p>
@@ -107,7 +110,6 @@
             </div>
         </div>
 
-        <!-- Navigasi Tab -->
         <div class="flex border-b mb-6 overflow-x-auto">
             <button onclick="switchTab('sales')" id="tabSales" class="px-6 py-3 text-sm font-bold tab-active whitespace-nowrap">
                 <i class="fas fa-shopping-cart mr-2"></i>Transaksi
@@ -123,7 +125,6 @@
             </button>
         </div>
 
-        <!-- Bagian Transaksi -->
         <div id="sectionSales">
             <div class="bg-white p-4 rounded-xl border border-slate-200 mb-6 shadow-sm">
                 <div class="flex flex-col gap-4">
@@ -200,7 +201,6 @@
             </div>
         </div>
 
-        <!-- Bagian Pengeluaran -->
         <div id="sectionExpenses" class="hidden">
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-xl font-bold text-slate-800">Biaya Operasional & Zakat</h3>
@@ -226,7 +226,23 @@
     </div>
 </div>
 
-<!-- Modal: Transaksi (Sale) -->
+<div id="printLabelModal" class="modal">
+    <div class="bg-white mx-auto mt-20 p-6 rounded-xl w-full max-w-sm shadow-2xl">
+        <h3 class="text-lg font-bold mb-4">Opsi Cetak Label</h3>
+        <div class="space-y-4">
+            <label class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer">
+                <input type="checkbox" id="printIncludeProduct" checked class="w-5 h-5">
+                <span class="text-sm font-medium">Tampilkan Rincian Produk</span>
+            </label>
+            <input type="hidden" id="printLabelIndex">
+            <div class="flex gap-2">
+                <button onclick="closeModal('printLabelModal')" class="flex-1 py-2 text-sm font-bold text-slate-500 bg-slate-100 rounded-lg">Batal</button>
+                <button onclick="executePrintLabel()" class="flex-1 py-2 text-sm font-bold text-white bg-blue-600 rounded-lg">Cetak Sekarang</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div id="saleModal" class="modal">
     <div class="bg-white mx-auto mt-5 p-6 rounded-xl w-full max-w-4xl shadow-2xl">
         <div class="flex justify-between items-center mb-6">
@@ -292,7 +308,6 @@
     </div>
 </div>
 
-<!-- Modal: Cicilan -->
 <div id="paymentModal" class="modal">
     <div class="bg-white mx-auto mt-5 p-6 rounded-xl w-full max-w-2xl shadow-2xl">
         <div class="flex justify-between items-center mb-6">
@@ -322,7 +337,6 @@
     </div>
 </div>
 
-<!-- Modal: Pengeluaran -->
 <div id="expenseModal" class="modal">
     <div class="bg-white mx-auto mt-10 p-6 rounded-xl w-full max-w-md shadow-2xl">
         <div class="flex justify-between items-center mb-6">
@@ -344,7 +358,6 @@
     </div>
 </div>
 
-<!-- Modal: Kelola Staf -->
 <div id="staffModal" class="modal">
     <div class="bg-white mx-auto mt-10 p-6 rounded-xl w-full max-w-2xl shadow-2xl">
         <div class="flex justify-between items-center mb-6">
@@ -372,7 +385,6 @@
     </div>
 </div>
 
-<!-- Modal: Profil Toko -->
 <div id="storeProfileModal" class="modal">
     <div class="bg-white mx-auto mt-10 p-6 rounded-xl w-full max-w-md shadow-2xl">
         <div class="flex justify-between items-center mb-6">
@@ -388,7 +400,6 @@
     </div>
 </div>
 
-<!-- Modal Image Preview -->
 <div id="imagePreviewModal" class="modal" onclick="closeModal('imagePreviewModal')">
     <div class="flex items-center justify-center min-h-screen p-4">
         <img id="fullSizeImg" src="" class="max-w-full max-h-[90vh] rounded-lg shadow-2xl">
@@ -446,7 +457,6 @@
         });
     }
 
-    // --- DASHBOARD DENGAN PERHITUNGAN ZAKAT 2.5% ---
     function updateUI() {
         if (!currentUser) return;
         renderTransactions();
@@ -479,36 +489,23 @@
                 }
             });
 
-            // Laba Kotor & Laba Bersih (Sebelum Zakat)
             const marginKotor = totalOmzet - totalHpp;
             const labaBersihSebelumZakat = marginKotor - totalOperasional;
-            
-            // Perhitungan Zakat: 2.5% dari Laba Bersih
-            // Jika laba bersih negatif, kewajiban zakat dianggap 0
             const kewajibanZakat = Math.max(0, labaBersihSebelumZakat * 0.025);
             const sisaZakatWajib = Math.max(0, kewajibanZakat - totalZakatTerbayar);
-            
-            // Laba Bersih Akhir (Setelah dikurangi zakat yang seharunya dibayar)
             const labaBersihAkhir = labaBersihSebelumZakat - kewajibanZakat;
-
-            // Perhitungan Sisa/Hutang
             const sisaHutangPembeli = totalOmzet - totalTerbayarB;
             const sisaHutangSupplier = totalHpp - totalTerbayarS;
             const sisaLabaBelumMasuk = marginKotor - (totalTerbayarB - totalTerbayarS);
 
-            // Tampilkan ke UI
             document.getElementById('statOmzet').innerText = `Rp ${formatNumber(totalOmzet)}`;
             document.getElementById('statSisaPembeli').innerText = `Hutang: Rp ${formatNumber(sisaHutangPembeli)}`;
-            
             document.getElementById('statLaba').innerText = `Rp ${formatNumber(marginKotor)}`;
             document.getElementById('statSisaLaba').innerText = `Belum Masuk: Rp ${formatNumber(sisaLabaBelumMasuk)}`;
-            
             document.getElementById('statLabaBersih').innerText = `Rp ${formatNumber(labaBersihAkhir)}`;
             document.getElementById('statKewajibanZakat').innerText = `Wajib Zakat: Rp ${formatNumber(kewajibanZakat)}`;
-            
             document.getElementById('statHpp').innerText = `Rp ${formatNumber(totalHpp)}`;
             document.getElementById('statSisaSupplier').innerText = `Utang: Rp ${formatNumber(sisaHutangSupplier)}`;
-            
             document.getElementById('statPengeluaran').innerText = `Rp ${formatNumber(totalOperasional)}`;
             document.getElementById('statSisaZakat').innerText = `Sisa Zakat: Rp ${formatNumber(sisaZakatWajib)}`;
         }
@@ -607,13 +604,146 @@
                             ` : ''}
                         </div>
                     </td>
-                    <td class="p-4 border-b text-center">
-                        <button onclick="editTx(${idxReal})" class="text-slate-400 hover:text-blue-600"><i class="fas fa-edit"></i></button>
+                    <td class="p-4 border-b">
+                        <div class="flex items-center justify-center gap-2">
+                            <button onclick="editTx(${idxReal})" class="text-slate-400 hover:text-blue-600 p-1" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button onclick="openPrintLabel(${idxReal})" class="text-slate-400 hover:text-emerald-600 p-1" title="Cetak Label"><i class="fas fa-shipping-fast"></i></button>
+                            <button onclick="printInvoice(${idxReal})" class="text-slate-400 hover:text-orange-600 p-1" title="Cetak Invoice"><i class="fas fa-file-invoice-dollar"></i></button>
+                        </div>
                     </td>
                 </tr>
             `;
         });
     }
+
+    // --- FITUR CETAK ---
+
+    function openPrintLabel(index) {
+        document.getElementById('printLabelIndex').value = index;
+        openModal('printLabelModal');
+    }
+
+    function executePrintLabel() {
+        const index = document.getElementById('printLabelIndex').value;
+        const includeProduct = document.getElementById('printIncludeProduct').checked;
+        const t = db.transactions[index];
+        const store = db.config;
+        
+        const area = document.getElementById('printArea');
+        area.innerHTML = `
+            <div style="border: 2px dashed #000; padding: 20px; width: 400px; margin: auto; background: white; color: black; font-family: sans-serif;">
+                <div style="text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 10px;">
+                    <h2 style="margin: 0; text-transform: uppercase;">${store.name}</h2>
+                    <p style="margin: 2px; font-size: 12px;">${store.address}</p>
+                    <p style="margin: 2px; font-size: 12px;">WA: ${store.phone}</p>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <p style="margin: 0; font-size: 10px; text-transform: uppercase; font-weight: bold;">Penerima:</p>
+                    <p style="margin: 2px 0; font-size: 16px; font-weight: bold;">${t.buyerName}</p>
+                    <p style="margin: 2px 0; font-size: 14px;">${t.buyerPhone}</p>
+                    <p style="margin: 5px 0; font-size: 14px; border: 1px solid #ccc; padding: 5px;">${t.buyerAddress}</p>
+                </div>
+                ${includeProduct ? `
+                <div style="border-top: 1px dashed #000; padding-top: 10px;">
+                    <p style="margin: 0 0 5px 0; font-size: 10px; font-weight: bold;">DETAIL PESANAN:</p>
+                    <p style="margin: 0; font-size: 14px;">${t.itemName} x${t.itemQty}</p>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        
+        closeModal('printLabelModal');
+        window.print();
+    }
+
+    function printInvoice(index) {
+        const t = db.transactions[index];
+        const store = db.config;
+        const netB = (t.priceSale * t.itemQty) - (t.discount || 0);
+        const paidB = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
+        
+        const area = document.getElementById('printArea');
+        area.innerHTML = `
+            <div style="padding: 40px; background: white; color: black; font-family: sans-serif; max-width: 800px; margin: auto;">
+                <div style="display: flex; justify-between; border-bottom: 4px solid #333; padding-bottom: 20px; margin-bottom: 20px;">
+                    <div style="flex: 1;">
+                        <h1 style="margin: 0; color: #2563eb;">INVOICE</h1>
+                        <p style="margin: 5px 0;">#TX-${index}-${t.datePurchase.replace(/-/g,'')}</p>
+                    </div>
+                    <div style="text-align: right; flex: 1;">
+                        <h3 style="margin: 0;">${store.name}</h3>
+                        <p style="margin: 2px; font-size: 12px;">${store.address}</p>
+                        <p style="margin: 2px; font-size: 12px;">Telp: ${store.phone}</p>
+                    </div>
+                </div>
+
+                <div style="display: flex; margin-bottom: 30px;">
+                    <div style="flex: 1;">
+                        <p style="font-size: 12px; color: #666; margin: 0;">DITAGIHKAN KEPADA:</p>
+                        <p style="font-weight: bold; margin: 5px 0;">${t.buyerName}</p>
+                        <p style="margin: 0; font-size: 12px;">${t.buyerPhone}</p>
+                        <p style="margin: 0; font-size: 12px;">${t.buyerAddress}</p>
+                    </div>
+                    <div style="flex: 1; text-align: right;">
+                        <p style="font-size: 12px; color: #666; margin: 0;">TANGGAL TRANSAKSI:</p>
+                        <p style="font-weight: bold; margin: 5px 0;">${t.datePurchase}</p>
+                    </div>
+                </div>
+
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+                    <thead>
+                        <tr style="background: #f1f5f9; text-align: left;">
+                            <th style="padding: 12px; border-bottom: 2px solid #ddd;">Produk</th>
+                            <th style="padding: 12px; border-bottom: 2px solid #ddd; text-align: center;">Qty</th>
+                            <th style="padding: 12px; border-bottom: 2px solid #ddd; text-align: right;">Harga</th>
+                            <th style="padding: 12px; border-bottom: 2px solid #ddd; text-align: right;">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 12px; border-bottom: 1px solid #eee;">${t.itemName}</td>
+                            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${t.itemQty}</td>
+                            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">Rp ${formatNumber(t.priceSale)}</td>
+                            <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">Rp ${formatNumber(t.priceSale * t.itemQty)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div style="display: flex; justify-content: flex-end;">
+                    <div style="width: 250px;">
+                        <div style="display: flex; justify-between; margin-bottom: 5px;">
+                            <span>Total Kotor:</span>
+                            <span style="flex: 1; text-align: right;">Rp ${formatNumber(t.priceSale * t.itemQty)}</span>
+                        </div>
+                        <div style="display: flex; justify-between; margin-bottom: 5px; color: #dc2626;">
+                            <span>Diskon:</span>
+                            <span style="flex: 1; text-align: right;">- Rp ${formatNumber(t.discount)}</span>
+                        </div>
+                        <div style="display: flex; justify-between; margin-top: 10px; padding-top: 10px; border-top: 2px solid #333; font-weight: bold; font-size: 18px;">
+                            <span>Total Akhir:</span>
+                            <span style="flex: 1; text-align: right;">Rp ${formatNumber(netB)}</span>
+                        </div>
+                        <div style="display: flex; justify-between; margin-top: 5px; font-size: 14px; color: #059669;">
+                            <span>Sudah Dibayar:</span>
+                            <span style="flex: 1; text-align: right;">Rp ${formatNumber(paidB)}</span>
+                        </div>
+                        <div style="display: flex; justify-between; margin-top: 5px; font-size: 14px; color: #dc2626; font-weight: bold;">
+                            <span>Sisa Tagihan:</span>
+                            <span style="flex: 1; text-align: right;">Rp ${formatNumber(netB - paidB)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 50px; text-align: center; color: #666; font-size: 12px;">
+                    <p>Terima kasih atas kepercayaan Anda bertransaksi di ${store.name}.</p>
+                    <p>Semoga berkah.</p>
+                </div>
+            </div>
+        `;
+        window.print();
+    }
+
+    // --- SISA KODE (RETAINED) ---
 
     function renderExpenses() {
         const tbody = document.getElementById('expenseTableBody');

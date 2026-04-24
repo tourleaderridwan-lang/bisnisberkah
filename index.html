@@ -153,7 +153,6 @@
                             <i class="fas fa-plus"></i> Transaksi Baru
                         </button>
                     </div>
-
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
                         <div>
                             <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">Status Pengiriman</label>
@@ -276,20 +275,26 @@
                     <input type="text" id="fBuyerPhone" required class="w-full border p-2.5 rounded text-sm" placeholder="WhatsApp Pembeli">
                     <textarea id="fBuyerAddress" class="w-full border p-2.5 rounded text-sm h-20" placeholder="Alamat Pengiriman"></textarea>
                 </div>
-                <div class="p-4 bg-blue-50 rounded-lg space-y-3">
-                    <h4 class="text-xs font-black uppercase text-blue-400 tracking-widest">Data Produk</h4>
-                    <input type="text" id="fItemName" list="listItemNames" required class="w-full border p-2.5 rounded text-sm" placeholder="Nama Produk">
-                    <datalist id="listItemNames"></datalist>
-                    <div class="grid grid-cols-2 gap-2">
-                        <input type="number" id="fItemQty" value="1" class="border p-2.5 rounded text-sm" placeholder="Qty">
-                        <input type="text" id="fDiscount" oninput="handleCurrencyInput(this)" class="border p-2.5 rounded text-sm" placeholder="Diskon (Rp)">
+                
+                <div class="p-4 bg-blue-50 rounded-lg space-y-3 md:col-span-2">
+                    <div class="flex justify-between items-center">
+                        <h4 class="text-xs font-black uppercase text-blue-400 tracking-widest">Daftar Produk</h4>
+                        <button type="button" onclick="addProductRow()" class="bg-blue-600 text-white text-[10px] px-3 py-1.5 rounded-md font-bold hover:bg-blue-700">
+                            <i class="fas fa-plus mr-1"></i> Tambah Produk
+                        </button>
                     </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <input type="text" id="fPriceCost" oninput="handleCurrencyInput(this)" class="border p-2.5 rounded text-sm" placeholder="Modal (HPP)">
-                        <input type="text" id="fPriceSale" oninput="handleCurrencyInput(this)" class="border p-2.5 rounded text-sm font-bold text-blue-700" placeholder="Harga Jual">
+                    <div id="productListContainer" class="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                        </div>
+                    <datalist id="listItemNames"></datalist>
+                    <div class="pt-2 border-t border-blue-100 flex justify-end gap-4">
+                        <div class="text-right">
+                            <p class="text-[10px] font-bold text-blue-400 uppercase">Total Jual Bersih</p>
+                            <p id="fTotalSaleDisplay" class="text-lg font-bold text-blue-700">Rp 0</p>
+                        </div>
                     </div>
                 </div>
             </div>
+
             <div class="space-y-4">
                 <div class="p-4 bg-orange-50 rounded-lg space-y-3">
                     <h4 class="text-xs font-black uppercase text-orange-400 tracking-widest">Status & Pengiriman</h4>
@@ -462,9 +467,15 @@
     window.onload = () => { loadDB(); };
 
     function refreshDatalists() {
-        const products = [...new Set(db.transactions.map(t => t.itemName))];
+        const products = [...new Set(db.transactions.flatMap(t => 
+            (t.items && t.items.length > 0) 
+            ? t.items.map(i => i.name) 
+            : [t.itemName]
+        ))].filter(name => name);
+
         const buyers = [...new Set(db.transactions.map(t => t.buyerName))];
         const suppliers = [...new Set(db.transactions.map(t => t.supplierName).filter(s => s))];
+        
         updateDatalist('listItemNames', products);
         updateDatalist('listBuyerNames', buyers);
         updateDatalist('listSupplierNames', suppliers);
@@ -494,6 +505,31 @@
         if(!name) return;
         const history = db.transactions.find(t => t.supplierName && t.supplierName.toLowerCase() === name.toLowerCase());
         if(history) { document.getElementById('fSupplierPhone').value = history.supplierPhone || ''; }
+    }
+
+    function handleAutoFillProduct(inputEl) {
+        const name = inputEl.value;
+        if(!name) return;
+        
+        let history = null;
+        for (let t of db.transactions) {
+            if (t.items) {
+                history = t.items.find(i => i.name.toLowerCase() === name.toLowerCase());
+            } else if (t.itemName && t.itemName.toLowerCase() === name.toLowerCase()) {
+                history = { cost: t.priceCost, sale: t.priceSale };
+            }
+            if (history) break;
+        }
+
+        if(history) {
+            const row = inputEl.closest('.product-row');
+            const costInput = row.querySelector('.p-priceCost');
+            const saleInput = row.querySelector('.p-priceSale');
+            
+            if(!costInput.value) costInput.value = formatInput(history.cost || history.priceCost || 0);
+            if(!saleInput.value) saleInput.value = formatInput(history.sale || history.priceSale || 0);
+            calculateTotalForm();
+        }
     }
 
     function handleLogin() {
@@ -530,8 +566,15 @@
             let totalSisaHutangSupplier = 0;
 
             db.transactions.forEach(t => {
-                const netSale = (t.priceSale * t.itemQty) - (t.discount || 0);
-                const hpp = (t.priceCost * t.itemQty);
+                let netSale, hpp;
+                if (t.items && t.items.length > 0) {
+                    netSale = t.items.reduce((s, i) => s + (i.sale * i.qty - (i.discount || 0)), 0);
+                    hpp = t.items.reduce((s, i) => s + (i.cost * i.qty), 0);
+                } else {
+                    netSale = (t.priceSale * t.itemQty) - (t.discount || 0);
+                    hpp = (t.priceCost * t.itemQty);
+                }
+                
                 totalOmzet += netSale; totalHpp += hpp;
                 
                 let paidSForThisTx = 0;
@@ -586,7 +629,7 @@
         const fPayS = document.getElementById('filterPaySupplier').value;
         
         const filtered = db.transactions.filter(t => {
-            let pName = t.itemName.toLowerCase().includes(fProductName);
+            const productMatch = t.items ? t.items.some(i => i.name.toLowerCase().includes(fProductName)) : t.itemName.toLowerCase().includes(fProductName);
             const txDate = new Date(t.datePurchase);
             const now = new Date();
             let pTime = true;
@@ -601,19 +644,28 @@
             let pShip = true;
             if(fShipped === 'shipped') pShip = t.isShipped;
             if(fShipped === 'pending') pShip = !t.isShipped;
-            const netB = (t.priceSale * t.itemQty) - (t.discount || 0);
+
+            let netB, hppS;
+            if(t.items && t.items.length > 0) {
+                netB = t.items.reduce((s, i) => s + (i.sale * i.qty - (i.discount || 0)), 0);
+                hppS = t.items.reduce((s, i) => s + (i.cost * i.qty), 0);
+            } else {
+                netB = (t.priceSale * t.itemQty) - (t.discount || 0);
+                hppS = (t.priceCost * t.itemQty);
+            }
+
             const paidB = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
             const isLunasB = paidB >= netB;
             let pPayB = true;
             if(fPayB === 'paid') pPayB = isLunasB;
             if(fPayB === 'debt') pPayB = !isLunasB;
-            const hppS = (t.priceCost * t.itemQty);
+
             const paidS = (t.payments || []).filter(p => p.type === 'supplier').reduce((s, p) => s + p.amount, 0);
             const isLunasS = t.isReady || (paidS >= hppS);
             let pPayS = true;
             if(fPayS === 'paid') pPayS = isLunasS;
             if(fPayS === 'debt') pPayS = !isLunasS;
-            return pName && pTime && pShip && pPayB && pPayS;
+            return productMatch && pTime && pShip && pPayB && pPayS;
         });
 
         const pageSizeVal = document.getElementById('pageSize').value;
@@ -628,19 +680,28 @@
 
         displayData.forEach((t) => {
             const idxReal = db.transactions.indexOf(t);
-            const netB = (t.priceSale * t.itemQty) - (t.discount || 0);
+            let netB, hppS;
+            if(t.items && t.items.length > 0) {
+                netB = t.items.reduce((s, i) => s + (i.sale * i.qty - (i.discount || 0)), 0);
+                hppS = t.items.reduce((s, i) => s + (i.cost * i.qty), 0);
+            } else {
+                netB = (t.priceSale * t.itemQty) - (t.discount || 0);
+                hppS = (t.priceCost * t.itemQty);
+            }
+
             const paidB = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
             const lunasB = paidB >= netB;
-            const hppS = (t.priceCost * t.itemQty);
             const paidS = (t.payments || []).filter(p => p.type === 'supplier').reduce((s, p) => s + p.amount, 0);
             const lunasS = t.isReady || (paidS >= hppS);
             const sisaS = t.isReady ? 0 : (hppS - paidS);
+
+            const itemDisplay = t.items ? (t.items.length > 1 ? `${t.items[0].name} (+${t.items.length-1})` : t.items[0].name) : t.itemName;
 
             tbody.innerHTML += `
                 <tr class="hover:bg-slate-50">
                     <td class="p-4 border-b text-[10px] font-mono">${t.datePurchase}</td>
                     <td class="p-4 border-b">
-                        <div class="font-bold">${t.itemName}</div>
+                        <div class="font-bold">${itemDisplay}</div>
                         <div class="text-[9px] ${t.isReady ? 'text-blue-500' : 'text-orange-500'}">${t.isReady ? 'Ready' : 'PO'}</div>
                     </td>
                     <td class="p-4 border-b text-center">
@@ -702,10 +763,23 @@
 
     function printInvoice(index) {
         const t = db.transactions[index], store = db.config;
-        const netB = (t.priceSale * t.itemQty) - (t.discount || 0);
+        let itemsHtml = '';
+        let totalNet = 0;
+        
+        if(t.items && t.items.length > 0) {
+            t.items.forEach(i => {
+                const sub = (i.sale * i.qty) - (i.discount || 0);
+                itemsHtml += `<tr><td>${i.name} x${i.qty}</td><td style="text-align:right">Rp ${formatNumber(sub)}</td></tr>`;
+                totalNet += sub;
+            });
+        } else {
+            totalNet = (t.priceSale * t.itemQty) - (t.discount || 0);
+            itemsHtml = `<tr><td>${t.itemName} x${t.itemQty}</td><td style="text-align:right">Rp ${formatNumber(totalNet)}</td></tr>`;
+        }
+
         const paidB = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
         const area = document.getElementById('printArea');
-        area.innerHTML = `<div style="padding: 40px; background: white; color: black; font-family: sans-serif; max-width: 800px; margin: auto;"><h1 style="color: #2563eb;">INVOICE</h1><p>#TX-${index}</p><hr><h3>${store.name}</h3><p>${store.address}</p><p>Penerima: ${t.buyerName} (${t.buyerPhone})</p><hr><table style="width:100%"><tr><td>${t.itemName} x${t.itemQty}</td><td style="text-align:right">Rp ${formatNumber(netB)}</td></tr></table><hr><p style="text-align:right">Sisa Tagihan: Rp ${formatNumber(netB - paidB)}</p></div>`;
+        area.innerHTML = `<div style="padding: 40px; background: white; color: black; font-family: sans-serif; max-width: 800px; margin: auto;"><h1 style="color: #2563eb;">INVOICE</h1><p>#TX-${index}</p><hr><h3>${store.name}</h3><p>${store.address}</p><p>Penerima: ${t.buyerName} (${t.buyerPhone})</p><hr><table style="width:100%">${itemsHtml}</table><hr><p style="text-align:right">Total: Rp ${formatNumber(totalNet)}</p><p style="text-align:right">Sisa Tagihan: Rp ${formatNumber(totalNet - paidB)}</p></div>`;
         window.print();
     }
 
@@ -714,6 +788,13 @@
         const store = db.config;
         const showProduct = confirm("Tampilkan detail produk pada label pengiriman?");
         
+        let productList = '';
+        if(t.items && t.items.length > 0) {
+            productList = t.items.map(i => `${i.name} (x${i.qty})`).join(', ');
+        } else {
+            productList = `${t.itemName} (x${t.itemQty})`;
+        }
+
         const area = document.getElementById('printArea');
         area.innerHTML = `
             <div style="padding: 20px; background: white; color: black; font-family: sans-serif; max-width: 400px; border: 2px dashed #000; margin: auto;">
@@ -721,30 +802,23 @@
                     <h2 style="margin: 0; font-size: 18px;">LABEL PENGIRIMAN</h2>
                     <span style="font-size: 10px; font-weight: bold;">${t.datePurchase}</span>
                 </div>
-                
                 <div style="margin-bottom: 15px;">
                     <p style="margin: 0 0 5px 0; font-size: 10px; text-transform: uppercase; color: #666;">Penerima:</p>
                     <p style="margin: 0; font-size: 16px; font-weight: bold;">${t.buyerName}</p>
                     <p style="margin: 3px 0; font-size: 12px;">${t.buyerPhone}</p>
                     <p style="margin: 0; font-size: 12px; line-height: 1.4;">${t.buyerAddress || '-'}</p>
                 </div>
-
                 <div style="margin-bottom: 15px; background: #f0f0f0; padding: 10px; border-radius: 4px;">
                     <p style="margin: 0 0 5px 0; font-size: 10px; text-transform: uppercase; color: #666;">Pengirim:</p>
                     <p style="margin: 0; font-size: 14px; font-weight: bold;">${store.name}</p>
                     <p style="margin: 0; font-size: 12px;">${store.phone}</p>
                 </div>
-
                 ${showProduct ? `
                 <div style="border-top: 1px solid #ccc; pt-10; margin-top: 10px;">
                     <p style="margin: 8px 0 0 0; font-size: 10px; text-transform: uppercase; color: #666;">Isi Paket:</p>
-                    <p style="margin: 3px 0 0 0; font-size: 12px; font-weight: bold;">${t.itemName} (x${t.itemQty})</p>
+                    <p style="margin: 3px 0 0 0; font-size: 12px; font-weight: bold;">${productList}</p>
                 </div>
                 ` : ''}
-
-                <div style="margin-top: 15px; text-align: center; font-size: 9px; font-style: italic; color: #999;">
-                    Terima kasih telah berbelanja di ${store.name}
-                </div>
             </div>
         `;
         window.print();
@@ -775,10 +849,76 @@
         db.users.filter(u => u.role !== 'owner').forEach((u, i) => { list.innerHTML += `<div class="bg-white border p-3 rounded-lg flex justify-between"><span>${u.user}</span><button onclick="db.users.splice(db.users.indexOf(${u}), 1); saveDB(); renderStaffList();" class="text-red-400"><i class="fas fa-trash"></i></button></div>`; }); 
     }
 
+    function addProductRow(data = null) {
+        const container = document.getElementById('productListContainer');
+        const rowId = Date.now() + Math.random();
+        
+        // MODIFIKASI: Dibuat 2 baris agar input luas
+        const rowHtml = `
+            <div class="product-row bg-white p-4 rounded-lg border border-blue-100 relative shadow-sm" id="row-${rowId}">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+                    <div class="md:col-span-10">
+                        <label class="text-[10px] uppercase text-slate-400 font-bold mb-1 block">Nama Produk</label>
+                        <input type="text" class="p-itemName w-full border p-2.5 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-blue-500" 
+                            list="listItemNames" 
+                            placeholder="Masukkan Nama Produk" 
+                            required 
+                            value="${data ? (data.name || data.itemName) : ''}"
+                            oninput="handleAutoFillProduct(this)">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="text-[10px] uppercase text-slate-400 font-bold mb-1 block">Qty</label>
+                        <input type="number" class="p-itemQty w-full border p-2.5 rounded-lg text-sm bg-slate-50" placeholder="Qty" value="${data ? (data.qty || data.itemQty) : 1}" oninput="calculateTotalForm()">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+                    <div class="md:col-span-4">
+                        <label class="text-[10px] uppercase text-slate-400 font-bold mb-1 block">HPP (Modal)</label>
+                        <input type="text" class="p-priceCost w-full border p-2.5 rounded-lg text-sm bg-slate-50" placeholder="Rp 0" oninput="handleCurrencyInput(this); calculateTotalForm()" value="${data ? formatInput(data.cost || data.priceCost) : ''}">
+                    </div>
+                    <div class="md:col-span-4">
+                        <label class="text-[10px] uppercase text-slate-400 font-bold mb-1 block font-black text-blue-600">Harga Jual</label>
+                        <input type="text" class="p-priceSale w-full border p-2.5 rounded-lg text-sm font-bold text-blue-700 bg-white border-blue-200 focus:ring-2 focus:ring-blue-500" placeholder="Rp 0" oninput="handleCurrencyInput(this); calculateTotalForm()" value="${data ? formatInput(data.sale || data.priceSale) : ''}">
+                    </div>
+                    <div class="md:col-span-3">
+                        <label class="text-[10px] uppercase text-slate-400 font-bold mb-1 block">Potongan/Disc</label>
+                        <input type="text" class="p-discount w-full border p-2.5 rounded-lg text-sm bg-slate-50" placeholder="Rp 0" oninput="handleCurrencyInput(this); calculateTotalForm()" value="${data ? formatInput(data.discount || 0) : ''}">
+                    </div>
+                    <div class="md:col-span-1 flex items-end justify-center pb-1">
+                        <button type="button" onclick="removeProductRow('row-${rowId}')" class="text-red-400 hover:text-red-600 p-2"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', rowHtml);
+        calculateTotalForm();
+    }
+
+    function removeProductRow(id) {
+        if(document.querySelectorAll('.product-row').length > 1) {
+            document.getElementById(id).remove();
+            calculateTotalForm();
+        } else alert("Minimal 1 produk");
+    }
+
+    function calculateTotalForm() {
+        let total = 0;
+        document.querySelectorAll('.product-row').forEach(row => {
+            const qty = Number(row.querySelector('.p-itemQty').value) || 0;
+            const sale = Number(unformatInput(row.querySelector('.p-priceSale').value)) || 0;
+            const disc = Number(unformatInput(row.querySelector('.p-discount').value)) || 0;
+            total += (qty * sale) - disc;
+        });
+        document.getElementById('fTotalSaleDisplay').innerText = `Rp ${formatNumber(total)}`;
+    }
+
     function prepareNewSale() { 
         document.getElementById('saleForm').reset(); 
         document.getElementById('editTxIndex').value = "-1"; 
         document.getElementById('fDatePurchase').value = new Date().toISOString().split('T')[0]; 
+        document.getElementById('productListContainer').innerHTML = '';
+        addProductRow();
         document.getElementById('paymentSummarySection').classList.add('hidden'); 
         currentActivePayments = []; 
         toggleSupplierFields(); toggleShippingFields(); openModal('saleModal'); 
@@ -790,17 +930,17 @@
         document.getElementById('fBuyerName').value = t.buyerName; 
         document.getElementById('fBuyerPhone').value = t.buyerPhone; 
         document.getElementById('fBuyerAddress').value = t.buyerAddress; 
-        document.getElementById('fItemName').value = t.itemName; 
-        document.getElementById('fItemQty').value = t.itemQty; 
-        document.getElementById('fPriceSale').value = formatInput(t.priceSale); 
-        document.getElementById('fPriceCost').value = formatInput(t.priceCost); 
-        document.getElementById('fDiscount').value = formatInput(t.discount || 0); 
         document.getElementById('fDatePurchase').value = t.datePurchase; 
         document.getElementById('fIsReady').checked = t.isReady; 
         document.getElementById('fIsShipped').checked = t.isShipped; 
         document.getElementById('fResiNumber').value = t.resi || ""; 
         document.getElementById('fSupplierName').value = t.supplierName || ""; 
         document.getElementById('fSupplierPhone').value = t.supplierPhone || ""; 
+        
+        document.getElementById('productListContainer').innerHTML = '';
+        if(t.items && t.items.length > 0) t.items.forEach(it => addProductRow(it));
+        else addProductRow(t);
+
         currentActivePayments = t.payments ? [...t.payments] : []; 
         document.getElementById('paymentSummarySection').classList.remove('hidden'); 
         toggleSupplierFields(); toggleShippingFields(); openModal('saleModal'); 
@@ -809,8 +949,30 @@
     document.getElementById('saleForm').addEventListener('submit', (e) => { 
         e.preventDefault(); 
         const idx = parseInt(document.getElementById('editTxIndex').value); 
+        
+        const items = [];
+        document.querySelectorAll('.product-row').forEach(row => {
+            items.push({
+                name: row.querySelector('.p-itemName').value,
+                qty: Number(row.querySelector('.p-itemQty').value),
+                cost: Number(unformatInput(row.querySelector('.p-priceCost').value)),
+                sale: Number(unformatInput(row.querySelector('.p-priceSale').value)),
+                discount: Number(unformatInput(row.querySelector('.p-discount').value))
+            });
+        });
+
         const data = { 
-            buyerName: document.getElementById('fBuyerName').value, buyerPhone: document.getElementById('fBuyerPhone').value, buyerAddress: document.getElementById('fBuyerAddress').value, itemName: document.getElementById('fItemName').value, itemQty: Number(document.getElementById('fItemQty').value), priceSale: Number(unformatInput(document.getElementById('fPriceSale').value)), priceCost: Number(unformatInput(document.getElementById('fPriceCost').value)), discount: Number(unformatInput(document.getElementById('fDiscount').value)), isReady: document.getElementById('fIsReady').checked, isShipped: document.getElementById('fIsShipped').checked, datePurchase: document.getElementById('fDatePurchase').value, resi: document.getElementById('fResiNumber').value, supplierName: document.getElementById('fSupplierName').value, supplierPhone: document.getElementById('fSupplierPhone').value, payments: currentActivePayments 
+            buyerName: document.getElementById('fBuyerName').value, 
+            buyerPhone: document.getElementById('fBuyerPhone').value, 
+            buyerAddress: document.getElementById('fBuyerAddress').value, 
+            items: items,
+            isReady: document.getElementById('fIsReady').checked, 
+            isShipped: document.getElementById('fIsShipped').checked, 
+            datePurchase: document.getElementById('fDatePurchase').value, 
+            resi: document.getElementById('fResiNumber').value, 
+            supplierName: document.getElementById('fSupplierName').value, 
+            supplierPhone: document.getElementById('fSupplierPhone').value, 
+            payments: currentActivePayments 
         }; 
         if(idx > -1) db.transactions[idx] = data; else db.transactions.unshift(data); 
         saveDB(); closeModal('saleModal'); 

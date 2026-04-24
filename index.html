@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         
@@ -149,9 +150,18 @@
                                 <div><input type="date" id="filterDateEnd" onchange="applyFilters()" class="w-full border p-2 rounded-lg text-sm"></div>
                             </div>
                         </div>
-                        <button onclick="prepareNewSale()" class="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition only-access" data-access="input_data">
-                            <i class="fas fa-plus"></i> Transaksi Baru
-                        </button>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="exportToExcel()" class="bg-emerald-600 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-emerald-700 transition text-sm font-bold">
+                                <i class="fas fa-file-export"></i> Export
+                            </button>
+                            <label class="bg-amber-500 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 hover:bg-amber-600 transition text-sm font-bold cursor-pointer">
+                                <i class="fas fa-file-import"></i> Import
+                                <input type="file" id="importExcelInput" class="hidden" accept=".xlsx, .xls" onchange="importFromExcel(event)">
+                            </label>
+                            <button onclick="prepareNewSale()" class="bg-blue-600 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition only-access font-bold" data-access="input_data">
+                                <i class="fas fa-plus"></i> Transaksi Baru
+                            </button>
+                        </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-slate-100">
                         <div>
@@ -853,7 +863,6 @@
         const container = document.getElementById('productListContainer');
         const rowId = Date.now() + Math.random();
         
-        // MODIFIKASI: Dibuat 2 baris agar input luas
         const rowHtml = `
             <div class="product-row bg-white p-4 rounded-lg border border-blue-100 relative shadow-sm" id="row-${rowId}">
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
@@ -1033,6 +1042,94 @@
 
     function openStoreProfile() { document.getElementById('pStoreName').value = db.config.name; document.getElementById('pStorePhone').value = db.config.phone; document.getElementById('pStoreAddress').value = db.config.address; openModal('storeProfileModal'); }
     function saveStoreProfile() { db.config.name = document.getElementById('pStoreName').value; db.config.phone = document.getElementById('pStorePhone').value; db.config.address = document.getElementById('pStoreAddress').value; saveDB(); updateStoreNameUI(); closeModal('storeProfileModal'); }
+
+    // --- FUNGSI EXPORT / IMPORT EXCEL ---
+    function exportToExcel() {
+        if (db.transactions.length === 0) {
+            alert("Tidak ada data untuk diexport");
+            return;
+        }
+
+        const reportData = db.transactions.map((t, index) => {
+            let totalJual = 0, totalHpp = 0, namaProduk = "";
+            if (t.items && t.items.length > 0) {
+                namaProduk = t.items.map(i => `${i.name} (x${i.qty})`).join(", ");
+                totalJual = t.items.reduce((s, i) => s + (i.sale * i.qty - (i.discount || 0)), 0);
+                totalHpp = t.items.reduce((s, i) => s + (i.cost * i.qty), 0);
+            } else {
+                namaProduk = t.itemName;
+                totalJual = (t.priceSale * (t.itemQty||1)) - (t.discount || 0);
+                totalHpp = (t.priceCost||0) * (t.itemQty||1);
+            }
+            const paidB = (t.payments || []).filter(p => p.type === 'buyer').reduce((s, p) => s + p.amount, 0);
+
+            return {
+                "Tanggal": t.datePurchase,
+                "Produk": namaProduk,
+                "Pembeli": t.buyerName,
+                "WA Pembeli": t.buyerPhone,
+                "Alamat": t.buyerAddress,
+                "Total Jual": totalJual,
+                "Total HPP": totalHpp,
+                "Sudah Bayar": paidB,
+                "Sisa Tagihan": totalJual - paidB,
+                "Status Kirim": t.isShipped ? "Sudah" : "Belum",
+                "Resi": t.resi || "-",
+                "Supplier": t.supplierName || "-",
+                "Ready Stok": t.isReady ? "Ya" : "PO"
+            };
+        });
+
+        const worksheet = XLSX.utils.json_to_sheet(reportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Transaksi");
+        XLSX.writeFile(workbook, `Transaksi_${db.config.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    }
+
+    function importFromExcel(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            if (confirm(`Impor ${jsonData.length} data transaksi?`)) {
+                jsonData.forEach(row => {
+                    const newTx = {
+                        datePurchase: row["Tanggal"] || new Date().toISOString().split('T')[0],
+                        buyerName: row["Pembeli"] || "Tanpa Nama",
+                        buyerPhone: String(row["WA Pembeli"] || ""),
+                        buyerAddress: row["Alamat"] || "",
+                        isShipped: row["Status Kirim"] === "Sudah",
+                        isReady: row["Ready Stok"] === "Ya",
+                        resi: row["Resi"] === "-" ? "" : row["Resi"],
+                        supplierName: row["Supplier"] === "-" ? "" : row["Supplier"],
+                        items: [{
+                            name: row["Produk"] || "Produk Import",
+                            qty: 1,
+                            cost: Number(row["Total HPP"]) || 0,
+                            sale: Number(row["Total Jual"]) || 0,
+                            discount: 0
+                        }],
+                        payments: row["Sudah Bayar"] > 0 ? [{
+                            type: 'buyer',
+                            amount: Number(row["Sudah Bayar"]),
+                            dateTime: new Date().toISOString()
+                        }] : []
+                    };
+                    db.transactions.unshift(newTx);
+                });
+                saveDB();
+                alert("Import Berhasil!");
+                event.target.value = '';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+    // --- AKHIR FUNGSI ---
 
     function formatNumber(n) { return new Intl.NumberFormat('id-ID').format(Math.round(n || 0)); }
     function unformatInput(v) { return v ? v.toString().replace(/\./g, "") : 0; }

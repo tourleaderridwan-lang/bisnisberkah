@@ -850,15 +850,53 @@
     });
 
     function openStaffManager() { renderStaffList(); openModal('staffModal'); }
+    
     function addStaff() { 
         const u = document.getElementById('sUsername').value, p = document.getElementById('sPassword').value; 
         if(!u || !p) return; 
         db.users.push({ user: u, pass: p, role: 'staff', access: { view_finance: document.getElementById('sAccFinance').checked, input_data: document.getElementById('sAccInput').checked, manage_expenses: document.getElementById('sAccExpense').checked, delete_data: document.getElementById('sAccDelete').checked, edit_tx: true, edit_pay: true } }); 
         saveDB(); renderStaffList(); 
+        // Reset form
+        document.getElementById('sUsername').value = "";
+        document.getElementById('sPassword').value = "";
     }
+
+    function editStaff(index) {
+        const staff = db.users[index];
+        document.getElementById('sUsername').value = staff.user;
+        document.getElementById('sPassword').value = staff.pass;
+        document.getElementById('sAccFinance').checked = staff.access.view_finance;
+        document.getElementById('sAccInput').checked = staff.access.input_data;
+        document.getElementById('sAccExpense').checked = staff.access.manage_expenses;
+        document.getElementById('sAccDelete').checked = staff.access.delete_data;
+        
+        // Hapus sementara agar saat disimpan tidak duplikat
+        db.users.splice(index, 1);
+        renderStaffList();
+    }
+
     function renderStaffList() { 
-        const list = document.getElementById('staffList'); list.innerHTML = ''; 
-        db.users.filter(u => u.role !== 'owner').forEach((u, i) => { list.innerHTML += `<div class="bg-white border p-3 rounded-lg flex justify-between"><span>${u.user}</span><button onclick="db.users.splice(db.users.indexOf(${u}), 1); saveDB(); renderStaffList();" class="text-red-400"><i class="fas fa-trash"></i></button></div>`; }); 
+        const list = document.getElementById('staffList'); 
+        list.innerHTML = ''; 
+        db.users.forEach((u, i) => { 
+            if(u.role !== 'owner') {
+                list.innerHTML += `
+                <div class="bg-white border p-3 rounded-lg flex justify-between items-center shadow-sm">
+                    <div>
+                        <p class="font-bold text-slate-700">${u.user}</p>
+                        <p class="text-[9px] text-slate-400 uppercase tracking-widest font-black">Staff Akses</p>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="editStaff(${i})" class="text-blue-500 hover:bg-blue-50 p-2 rounded transition">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="if(confirm('Hapus staf ini?')){db.users.splice(${i}, 1); saveDB(); renderStaffList();}" class="text-red-400 hover:bg-red-50 p-2 rounded transition">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>`;
+            }
+        }); 
     }
 
     function addProductRow(data = null) {
@@ -1043,9 +1081,8 @@
     }
 
     function openStoreProfile() { document.getElementById('pStoreName').value = db.config.name; document.getElementById('pStorePhone').value = db.config.phone; document.getElementById('pStoreAddress').value = db.config.address; openModal('storeProfileModal'); }
-    function saveStoreProfile() { db.config.name = document.getElementById('pStoreName').value; db.config.phone = document.getElementById('pStorePhone').value; db.config.address = document.getElementById('pStoreAddress').value; saveDB(); updateStoreNameUI(); closeModal('storeProfileModal'); }
+    function saveStoreProfile() { db.config.name = document.getElementById('pStoreName').value; db.config.phone = document.getElementById('pStorePhone').value; document.getElementById('pStoreAddress').value = db.config.address; saveDB(); updateStoreNameUI(); closeModal('storeProfileModal'); }
 
-    // --- FUNGSI EXPORT / IMPORT EXCEL ---
     function exportToExcel() {
         if (db.transactions.length === 0) {
             alert("Tidak ada data untuk diexport");
@@ -1131,7 +1168,6 @@
         };
         reader.readAsArrayBuffer(file);
     }
-    // --- AKHIR FUNGSI ---
 
     function formatNumber(n) { return new Intl.NumberFormat('id-ID').format(Math.round(n || 0)); }
     function unformatInput(v) { return v ? v.toString().replace(/\./g, "") : 0; }
